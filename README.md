@@ -2,6 +2,12 @@
 
 An interactive planner for tibialis posterior tendon transfer in foot drop. Drag the window point and the retinaculum point on the model, choose an insertion and a window height, and watch the dorsiflexion and hindfoot moments update.
 
+## Try it
+
+<img src="qr.png" alt="QR code that opens the planner" width="220">
+
+Scan the code with a phone camera, or open [iressa8655.github.io/tendon-transfer-planner](https://iressa8655.github.io/tendon-transfer-planner/).
+
 ## How it works
 
 The numbers come from the OpenSim Gait2392 musculoskeletal model with the tibialis posterior path rerouted.
