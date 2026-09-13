@@ -173,6 +173,20 @@ footer { display: flex; gap: 20px; align-items: flex-start; justify-content: spa
 .vector-inset svg { display: block; }
 @media (max-width: 820px) { .vector-inset { transform: scale(.78); transform-origin: top right; } }
 
+.gait-foot { align-items: flex-start; }
+.gait-foot > button { margin-top: 2px; }
+.gait-box { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 2px; }
+.gait-readout { font-size: 12.5px; color: var(--muted); }
+.gait-readout strong { color: var(--ink); font-variant-numeric: tabular-nums; }
+.gait-readout .custom { color: var(--amber); }
+.gait-spark { height: 52px; cursor: ew-resize; touch-action: pan-y; }
+.gait-spark svg { display: block; }
+/* the footer rule gives inputs flex: 1, which squashes a range to zero height inside this column */
+.gait-box input[type=range] { width: 100%; min-width: 0; flex: none; height: 22px; }
+.gait-phases { position: relative; height: 16px; font-size: 10px; color: var(--muted); }
+.gait-phase { position: absolute; top: 0; height: 16px; border-left: 1px solid var(--line); padding-left: 3px;
+  white-space: nowrap; overflow: hidden; }
+
 @media (max-width: 1280px) {
   main.layout { grid-template-columns: 250px minmax(0, 1fr); grid-template-areas: "controls viewer" "plots plots" "numbers numbers"; }
   .chart-stack { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
@@ -252,9 +266,18 @@ footer { display: flex; gap: 20px; align-items: flex-start; justify-content: spa
       <span class="hint">Drag a ring to move that point · drag elsewhere to orbit · scroll to zoom · double-click to reset</span>
     </div>
     <div class="viewer" id="viewer"></div>
-    <div class="viewer-foot">
-      <label for="ankle">View at ankle angle <strong id="ankleValue">0°</strong></label>
-      <input type="range" id="ankle" min="-20" max="20" step="1" value="0">
+    <div class="viewer-foot gait-foot">
+      <button class="ghost small" id="gaitPlay" type="button" aria-pressed="false" hidden>▶ Play</button>
+      <div class="gait-box" id="gaitBox" hidden>
+        <div class="gait-readout"><strong id="gaitPct">0%</strong> of gait cycle · <span id="gaitPhase"></span> · ankle <strong id="gaitAnkle">0°</strong></div>
+        <div class="gait-spark" id="gaitSpark"></div>
+        <input type="range" id="gait" min="0" max="100" step="0.5" value="0" aria-label="Gait cycle percent">
+        <div class="gait-phases" id="gaitPhases"></div>
+      </div>
+      <span id="anklePlain">
+        <label for="ankle">View at ankle angle <strong id="ankleValue">0°</strong></label>
+        <input type="range" id="ankle" min="-20" max="20" step="1" value="0">
+      </span>
       <button class="ghost" id="resetView">Reset view</button>
     </div>
     <div class="viewer-foot legend">
@@ -357,7 +380,7 @@ const COLOURS = { current: "#A78BFA", IO: "#3FB950", CT: "#F85149" };
 const HISTORY_LIMIT = 12;
 
 const state = {
-  z: -20, h: 7.53, p3: null, ins: "intermediate_cuneiform", palsy: "common", ankle: 0, showReferences: true, showVectors: true,
+  z: -20, h: 7.53, p3: null, ins: "intermediate_cuneiform", palsy: "common", ankle: 0, showReferences: true, showVectors: true, gait: null, gaitPct: null, gaitPlaying: false,
   config: null, result: null, scene: null, references: null, referencesFor: null,
 };
 const history = { entries: [], nextId: 1, activeId: null, hoverId: null };
@@ -834,6 +857,23 @@ function buildControls() {
   });
 
   $("ankle").addEventListener("input", () => setAnkle(Number($("ankle").value)));
+  $("gait").addEventListener("input", () => { stopGaitPlay(); setGaitPct(Number($("gait").value)); });
+  $("gaitPlay").addEventListener("click", toggleGaitPlay);
+  const spark = $("gaitSpark");
+  let sparkDragging = false;
+  const sparkPct = (event) => {
+    const rect = spark.getBoundingClientRect();
+    return clamp((event.clientX - rect.left - GAIT_INSET) / (rect.width - GAIT_INSET * 2) * 100, 0, 100);
+  };
+  spark.addEventListener("pointerdown", (event) => {
+    sparkDragging = true;
+    try { spark.setPointerCapture(event.pointerId); } catch (error) { /* ignore */ }
+    stopGaitPlay();
+    setGaitPct(sparkPct(event));
+  });
+  spark.addEventListener("pointermove", (event) => { if (sparkDragging) setGaitPct(sparkPct(event)); });
+  spark.addEventListener("pointerup", () => { sparkDragging = false; });
+  spark.addEventListener("pointercancel", () => { sparkDragging = false; });
   $("resetView").addEventListener("click", () => { if (three.ready) { frameView(); updateCamera(); requestRender(); } });
 
   $("refToggle").addEventListener("click", () => {
@@ -895,17 +935,123 @@ function renderControls() {
   document.querySelectorAll("#palsy button").forEach((button) => button.classList.toggle("active", button.dataset.level === state.palsy));
 }
 
-function setAnkle(angle) {
-  angle = clamp(Math.round(angle), -20, 20);
-  if (angle === state.ankle) return;
-  state.ankle = angle;
-  $("ankle").value = angle;
-  $("ankleValue").textContent = signed(angle, 0) + "°";
-  requestScene();
-  renderCharts();
+function setAnkle(angle, fromGait) {
+  angle = clamp(Math.round(angle * 10) / 10, -20, 20);
+  if (!fromGait && state.gait) {
+    // an angle picked on the plots is not tied to a moment in the stride
+    stopGaitPlay();
+    state.gaitPct = null;
+  }
+  if (angle !== state.ankle) {
+    state.ankle = angle;
+    $("ankle").value = angle;
+    $("ankleValue").textContent = signed(angle, 0) + "°";
+    requestScene();
+    renderCharts();
+  }
+  if (!fromGait) renderGait();
 }
 
 // ── numbers ─────────────────────────────────────────────────────────
+
+// ── gait cycle ──────────────────────────────────────────────────────
+//
+// The ankle angle the model is shown at follows one real stride: the left
+// leg of OpenSim's example walking trial, heel strike to heel strike, the
+// same curve as gait_cycle_ankle.ipynb. Angles picked on the plots unlink it.
+
+const GAIT_INSET = 9;       // the range thumb's centre stops 9 px short of each end
+const GAIT_SECONDS = 4;     // one stride lasts about 1.2 s in the trial, played slower
+
+function gaitAngleAt(pct) {
+  return valueAtAngle(state.gait.percent, state.gait.ankle_deg, pct);
+}
+
+function phaseAt(pct) {
+  for (const phase of state.gait.phases) {
+    if (pct < phase.end) return phase.name;
+  }
+  return state.gait.phases[state.gait.phases.length - 1].name;
+}
+
+function setGaitPct(pct) {
+  state.gaitPct = clamp(pct, 0, 100);
+  $("gait").value = state.gaitPct;
+  setAnkle(gaitAngleAt(state.gaitPct), true);
+  renderGait();
+}
+
+function buildGaitPhases() {
+  $("gaitPhases").innerHTML = state.gait.phases.map((phase) =>
+    '<span class="gait-phase" title="' + esc(phase.name) + " " + phase.start + " to " + phase.end + '%" style="left:calc(' +
+    GAIT_INSET + "px + (100% - " + GAIT_INSET * 2 + "px) * " + phase.start / 100 + ");width:calc((100% - " +
+    GAIT_INSET * 2 + "px) * " + (phase.end - phase.start) / 100 + ')">' + esc(phase.name.replace(" response", "")) + "</span>").join("");
+}
+
+function renderGait() {
+  if (!state.gait) return;
+  const linked = state.gaitPct !== null;
+  $("gaitPct").textContent = linked ? num(state.gaitPct, 0) + "%" : "—";
+  const phase = $("gaitPhase");
+  phase.textContent = linked ? phaseAt(state.gaitPct) : "angle picked on the plots";
+  phase.classList.toggle("custom", !linked);
+  $("gaitAnkle").textContent = signed(state.ankle, 1) + "°";
+  renderGaitSpark();
+}
+
+function renderGaitSpark() {
+  const element = $("gaitSpark");
+  const gait = state.gait;
+  if (!gait || !element.clientWidth) return;
+  const width = Math.round(element.clientWidth);
+  const height = 52;
+  const low = Math.floor(Math.min(...gait.ankle_deg) - 3);
+  const high = Math.ceil(Math.max(...gait.ankle_deg) + 3);
+  const px = (pct) => GAIT_INSET + pct / 100 * (width - GAIT_INSET * 2);
+  const py = (deg) => 4 + (high - deg) / (high - low) * (height - 8);
+  const font = 'font-family="Segoe UI, system-ui, sans-serif" font-size="9.5" fill="#9AA3B2"';
+  const swing = gait.phases[gait.phases.length - 1];
+
+  let svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height + '">';
+  svg += '<rect x="' + px(swing.start) + '" y="0" width="' + (px(100) - px(swing.start)) + '" height="' + height +
+    '" fill="#58A6FF" fill-opacity="0.07"/>';
+  svg += '<line x1="' + px(0) + '" y1="' + py(0) + '" x2="' + px(100) + '" y2="' + py(0) + '" stroke="#2A303C"/>';
+  svg += '<line x1="' + px(gait.toe_off_pct) + '" y1="2" x2="' + px(gait.toe_off_pct) + '" y2="' + (height - 2) +
+    '" stroke="#9AA3B2" stroke-dasharray="3 3"/>';
+  svg += '<text x="' + (px(gait.toe_off_pct) + 4) + '" y="11" ' + font + ">toe off " + num(gait.toe_off_pct, 0) + "%</text>";
+  svg += '<text x="' + (px(0) + 2) + '" y="11" ' + font + ">dorsiflexion +</text>";
+  svg += '<text x="' + (px(0) + 2) + '" y="' + (height - 3) + '" ' + font + ">plantarflexion −</text>";
+  const points = gait.percent.map((pct, i) => px(pct).toFixed(1) + "," + py(gait.ankle_deg[i]).toFixed(1)).join(" ");
+  svg += '<polyline points="' + points + '" fill="none" stroke="#C4B5FD" stroke-width="1.8" stroke-linejoin="round"/>';
+  if (state.gaitPct !== null) {
+    const x = px(state.gaitPct);
+    svg += '<line x1="' + x + '" y1="2" x2="' + x + '" y2="' + (height - 2) + '" stroke="#A78BFA" stroke-opacity="0.55"/>';
+    svg += '<circle cx="' + x + '" cy="' + py(state.ankle) + '" r="4" fill="#A78BFA" stroke="#0D1117" stroke-width="1.5"/>';
+  }
+  svg += "</svg>";
+  element.innerHTML = svg;
+}
+
+function toggleGaitPlay() {
+  state.gaitPlaying = !state.gaitPlaying;
+  $("gaitPlay").textContent = state.gaitPlaying ? "❚❚ Pause" : "▶ Play";
+  $("gaitPlay").setAttribute("aria-pressed", String(state.gaitPlaying));
+  if (!state.gaitPlaying) return;
+  if (state.gaitPct === null) state.gaitPct = 0;
+  let last = performance.now();
+  const step = (now) => {
+    if (!state.gaitPlaying) return;
+    const pct = (state.gaitPct + (now - last) / (GAIT_SECONDS * 1000) * 100) % 100;
+    last = now;
+    setGaitPct(pct);
+    requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+function stopGaitPlay() {
+  if (state.gaitPlaying) toggleGaitPlay();
+}
 
 function summary(result) {
   if (!result) return null;
@@ -1922,11 +2068,27 @@ async function start() {
     }
     $("mode").textContent = backend.label;
 
+    try {
+      state.gait = await getJSON("data/gait_cycle.json");
+    } catch (error) {
+      console.warn("No gait cycle data, the plain ankle slider stays.", error);
+    }
     state.z = state.config.presets.IO.z_mm;
     state.h = state.config.presets.IO.height_cm;
     buildControls();
     renderControls();
     $("caveats").innerHTML = state.config.caveats.map((caveat) => "<li>" + esc(caveat) + "</li>").join("");
+
+    if (state.gait) {
+      $("gaitBox").hidden = false;
+      $("gaitPlay").hidden = false;
+      $("anklePlain").hidden = true;
+      buildGaitPhases();
+      state.gaitPct = 0;
+      state.ankle = Math.round(gaitAngleAt(0) * 10) / 10;
+      $("ankle").value = state.ankle;
+      renderGait();
+    }
 
     setStatus("Loading bones…", "busy");
     initViewer(geometry || await getJSON("api/geometry"));
@@ -1936,7 +2098,10 @@ async function start() {
   }
 }
 
-window.addEventListener("resize", debounce(renderCharts, 150));
+window.addEventListener("resize", debounce(() => {
+  renderCharts();
+  renderGaitSpark();
+}, 150));
 start();
 })();
 </script>
