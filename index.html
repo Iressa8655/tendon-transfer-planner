@@ -8,7 +8,7 @@
 :root {
   --ink: #E6E8EE; --muted: #9AA3B2; --faint: #1F2430; --line: #2A303C;
   --bg: #0D1117; --panel: #161B22; --raised: #1C222B;
-  --green: #3FB950; --red: #F85149; --purple: #A78BFA; --amber: #D29922; --blue: #58A6FF; --teal: #F0F6FC;
+  --green: #3FB950; --red: #F85149; --purple: #A78BFA; --amber: #D29922; --blue: #58A6FF; --teal: #2DD4BF;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -161,11 +161,17 @@ footer { display: flex; gap: 20px; align-items: flex-start; justify-content: spa
 [hidden] { display: none !important; }
 .viewer-title { display: flex; align-items: center; gap: 10px; }
 .viewer-title button { white-space: nowrap; }
-.zone-labels { position: absolute; inset: 0; pointer-events: none; }
-.zone-label { position: absolute; transform: translate(-50%, -50%); font-size: 11px; font-weight: 650; padding: 1px 7px;
-  border-radius: 10px; background: rgba(13, 17, 23, .78); border: 1px solid; white-space: nowrap; }
-.legend i.sq { width: 11px; height: 11px; border-radius: 3px; vertical-align: -1px; }
-.zone-note { flex-basis: 100%; font-size: 11px; }
+.vector-labels { position: absolute; inset: 0; pointer-events: none; }
+.vector-label { position: absolute; transform: translate(-50%, -135%); font-size: 11px; font-weight: 650; padding: 1px 7px;
+  border-radius: 10px; background: rgba(13, 17, 23, .88); border: 1px solid; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.legend em.arr { font-style: normal; font-weight: 800; margin-right: 5px; }
+.vector-note { flex-basis: 100%; font-size: 11px; }
+.vector-label.below { transform: translate(-50%, 45%); }
+.vector-label.side { transform: translate(14px, -50%); }
+.vector-inset { position: absolute; right: 10px; top: 10px; background: rgba(13, 17, 23, .92);
+  border: 1px solid var(--line); border-radius: 10px; padding: 4px 6px; }
+.vector-inset svg { display: block; }
+@media (max-width: 820px) { .vector-inset { transform: scale(.78); transform-origin: top right; } }
 
 @media (max-width: 1280px) {
   main.layout { grid-template-columns: 250px minmax(0, 1fr); grid-template-areas: "controls viewer" "plots plots" "numbers numbers"; }
@@ -242,7 +248,7 @@ footer { display: flex; gap: 20px; align-items: flex-start; justify-content: spa
 
   <section class="panel viewer-panel">
     <div class="viewer-head">
-      <span class="viewer-title"><span class="section-title" style="margin:0">Model</span><button class="ghost small" id="zoneToggle" aria-pressed="true" type="button">Action zones</button></span>
+      <span class="viewer-title"><span class="section-title" style="margin:0">Model</span><button class="ghost small" id="vectorToggle" aria-pressed="true" type="button">Moment vectors</button></span>
       <span class="hint">Drag a ring to move that point · drag elsewhere to orbit · scroll to zoom · double-click to reset</span>
     </div>
     <div class="viewer" id="viewer"></div>
@@ -253,19 +259,18 @@ footer { display: flex; gap: 20px; align-items: flex-start; justify-content: spa
     </div>
     <div class="viewer-foot legend">
       <span><b style="border-color:#A78BFA"></b>Window point</span>
-      <span><b style="border-color:#F0F6FC"></b>Retinaculum point</span>
+      <span><b style="border-color:#2DD4BF"></b>Retinaculum point</span>
       <span><i style="background:#3FB950"></i>Transfer, green assists pronation, red drives supination</span>
       <span><i style="background:#58A6FF"></i>Tibialis anterior</span>
       <span><i style="background:#D29922"></i>Peroneals</span>
     </div>
-    <div class="viewer-foot legend" id="zoneLegend">
-      <span><i class="sq" style="background:#22D3EE"></i>Dorsiflexion + inversion</span>
-      <span><i class="sq" style="background:#E879F9"></i>Dorsiflexion + eversion</span>
-      <span><i class="sq" style="background:#FACC15"></i>Plantarflexion + inversion</span>
-      <span><i class="sq" style="background:#F87171"></i>Plantarflexion + eversion</span>
-      <span><i style="background:#93C5FD"></i>Ankle axis</span>
-      <span><i style="background:#F9A8D4"></i>Subtalar axis</span>
-      <span class="zone-note">The disc sits at the retinaculum point. Its colour shows what the transfer would do if the tendon crossed that spot. Inversion and eversion are about the subtalar axis, as part of supination and pronation.</span>
+    <div class="viewer-foot legend" id="vectorLegend">
+      <span><em class="arr" style="color:#F0F6FC">→</em>Total moment</span>
+      <span><em class="arr" style="color:#58A6FF">→</em>Dorsiflexion</span>
+      <span><em class="arr" style="color:#F0883E">→</em>Plantarflexion</span>
+      <span><em class="arr" style="color:#3FB950">→</em>Supination (inversion)</span>
+      <span><em class="arr" style="color:#F85149">→</em>Pronation (eversion)</span>
+      <span class="vector-note">The transfer's moment at the ankle angle shown, at full activation, drawn from the ankle joint centre. The dorsiflexion or plantarflexion arrow lies along the ankle axis, and the supination or pronation arrow along the subtalar axis. The dashed lines show the two parts adding up to the total. Arrows follow the right-hand rule.</span>
     </div>
   </section>
 
@@ -352,7 +357,7 @@ const COLOURS = { current: "#A78BFA", IO: "#3FB950", CT: "#F85149" };
 const HISTORY_LIMIT = 12;
 
 const state = {
-  z: -20, h: 7.53, p3: null, ins: "intermediate_cuneiform", palsy: "common", ankle: 0, showReferences: true, showZones: true,
+  z: -20, h: 7.53, p3: null, ins: "intermediate_cuneiform", palsy: "common", ankle: 0, showReferences: true, showVectors: true,
   config: null, result: null, scene: null, references: null, referencesFor: null,
 };
 const history = { entries: [], nextId: 1, activeId: null, hoverId: null };
@@ -837,10 +842,10 @@ function buildControls() {
     renderCharts();
   });
   $("clearHistory").addEventListener("click", clearHistory);
-  $("zoneToggle").addEventListener("click", () => {
-    state.showZones = !state.showZones;
-    $("zoneToggle").setAttribute("aria-pressed", String(state.showZones));
-    $("zoneLegend").hidden = !state.showZones;
+  $("vectorToggle").addEventListener("click", () => {
+    state.showVectors = !state.showVectors;
+    $("vectorToggle").setAttribute("aria-pressed", String(state.showVectors));
+    $("vectorLegend").hidden = !state.showVectors;
     updateScene();
   });
 
@@ -1277,7 +1282,7 @@ function initViewer(geometry) {
 
   const muscles = new THREE.Group();
   scene.add(muscles);
-  const zones = makeZones(scene, container);
+  const vectors = makeVectors(scene, container);
 
   function makeHandle(name, colour) {
     const handle = new THREE.Mesh(
@@ -1294,8 +1299,8 @@ function initViewer(geometry) {
   }
 
   Object.assign(three, {
-    ready: true, renderer, scene, camera, frames, muscles, container, zones,
-    handles: { window: makeHandle("window", 0xA78BFA), retinaculum: makeHandle("retinaculum", 0xF0F6FC) },
+    ready: true, renderer, scene, camera, frames, muscles, container, vectors,
+    handles: { window: makeHandle("window", 0xA78BFA), retinaculum: makeHandle("retinaculum", 0x2DD4BF) },
     raycaster: new THREE.Raycaster(), materials: {}, framed: false,
     orbit: { target: new THREE.Vector3(), radius: 0.5, theta: Math.PI / 4, phi: 1.25 },
   });
@@ -1321,7 +1326,7 @@ function requestRender() {
     renderQueued = false;
     for (const item of Object.values(three.handles)) item.ring.quaternion.copy(three.camera.quaternion);
     three.renderer.render(three.scene, three.camera);
-    positionZoneLabels();
+    positionVectorLabels();
   });
 }
 
@@ -1435,193 +1440,228 @@ function updateScene() {
       three.framed = true;
     }
   }
-  updateZones();
+  updateVectors();
   updateCamera();
   requestRender();
 }
 
-// ── action zones ────────────────────────────────────────────────────
+// ── moment vectors ──────────────────────────────────────────────────
 //
-// A disc at the height of the retinaculum point, perpendicular to the tibia.
-// For every spot X on it the shader asks: if the tendon crossed the
-// retinaculum here and ran straight to the insertion P4, which way would it
-// turn the ankle and the subtalar joint? The moment arm about an axis with
-// direction n through C is proportional to n · ((P4 − X) × (X − C)), the
-// same formula OpenSim's moment arm reduces to for this straight segment.
-// Colours add the note figures' colours: dorsiflexion blue, plantarflexion
-// red, inversion green, eversion red.
+// The transfer's moment at the ankle angle being viewed, drawn as solid
+// arrows from the ankle joint centre. A moment about an axis is a vector
+// along that axis (right-hand rule), so the dorsiflexion part points along
+// the ankle axis and the supination part along the subtalar axis. Both
+// lengths come straight from the engine's moments, and the axes are the
+// ones verified against OpenSim's moment arms.
 
-const ZONES = [
-  { key: "dfInv", label: "DF + inversion", colour: "#22D3EE" },
-  { key: "dfEv", label: "DF + eversion", colour: "#E879F9" },
-  { key: "pfInv", label: "PF + inversion", colour: "#FACC15" },
-  { key: "pfEv", label: "PF + eversion", colour: "#F87171" },
-];
-const ZONE_RADIUS = 0.075;
+const VECTOR_SCALE = 0.0024;   // metres per Nm, so 40 Nm draws as 9.6 cm
+const VECTOR_MIN_NM = 0.3;     // smaller parts are hidden
+const VECTOR_KEYS = ["total", "ankle", "subtalar"];
 
-function makeZones(scene, container) {
-  const uniforms = {
-    insertion: { value: new THREE.Vector3() },
-    ankleCentre: { value: new THREE.Vector3() },
-    ankleAxis: { value: new THREE.Vector3(0, 0, 1) },
-    subtalarCentre: { value: new THREE.Vector3() },
-    subtalarAxis: { value: new THREE.Vector3(1, 0, 0) },
-  };
-  const material = new THREE.ShaderMaterial({
-    uniforms,
-    transparent: true,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-    extensions: { derivatives: true },
-    vertexShader: [
-      "varying vec3 vWorld;",
-      "varying vec2 vUv;",
-      "void main() {",
-      "  vec4 world = modelMatrix * vec4(position, 1.0);",
-      "  vWorld = world.xyz;",
-      "  vUv = uv;",
-      "  gl_Position = projectionMatrix * viewMatrix * world;",
-      "}",
-    ].join("\n"),
-    fragmentShader: [
-      "uniform vec3 insertion;",
-      "uniform vec3 ankleCentre;",
-      "uniform vec3 ankleAxis;",
-      "uniform vec3 subtalarCentre;",
-      "uniform vec3 subtalarAxis;",
-      "varying vec3 vWorld;",
-      "varying vec2 vUv;",
-      "void main() {",
-      "  vec3 toInsertion = insertion - vWorld;",
-      "  float ankle = dot(ankleAxis, cross(toInsertion, vWorld - ankleCentre));",
-      "  float subtalar = dot(subtalarAxis, cross(toInsertion, vWorld - subtalarCentre));",
-      "  vec3 colour = ankle > 0.0",
-      "    ? (subtalar > 0.0 ? vec3(0.133, 0.827, 0.933) : vec3(0.910, 0.475, 0.976))",
-      "    : (subtalar > 0.0 ? vec3(0.980, 0.800, 0.082) : vec3(0.973, 0.443, 0.443));",
-      "  float radius = length(vUv - vec2(0.5)) * 2.0;",
-      "  float edge = 1.0 - smoothstep(0.86, 1.0, radius);",
-      "  float lineAnkle = abs(ankle) / max(fwidth(ankle), 1e-12);",
-      "  float lineSubtalar = abs(subtalar) / max(fwidth(subtalar), 1e-12);",
-      "  float line = 1.0 - smoothstep(0.7, 1.8, min(lineAnkle, lineSubtalar));",
-      "  colour = mix(colour, vec3(1.0), line * 0.8);",
-      "  float alpha = max(0.42, line * 0.9) * edge;",
-      "  gl_FragColor = vec4(colour, alpha);",
-      "}",
-    ].join("\n"),
-  });
+function makeArrow(group) {
+  const material = new THREE.MeshBasicMaterial({ color: 0xFFFFFF, depthTest: false });
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 18), material);
+  const head = new THREE.Mesh(new THREE.ConeGeometry(1, 1, 24), material);
+  const arrow = new THREE.Group();
+  arrow.add(shaft);
+  arrow.add(head);
+  group.add(arrow);
+  return { arrow, shaft, head, material };
+}
 
+function setArrow(item, origin, vector, radius, colour, order) {
+  const length = vector.length();
+  item.arrow.visible = length > 1e-6;
+  if (!item.arrow.visible) return;
+  item.material.color.set(colour);
+  const headLength = Math.min(length * 0.4, radius * 6);
+  const shaftLength = Math.max(length - headLength, 1e-6);
+  item.shaft.scale.set(radius, shaftLength, radius);
+  item.shaft.position.set(0, shaftLength / 2, 0);
+  item.head.scale.set(radius * 2.4, headLength, radius * 2.4);
+  item.head.position.set(0, shaftLength + headLength / 2, 0);
+  item.shaft.renderOrder = order;
+  item.head.renderOrder = order;
+  item.arrow.position.copy(origin);
+  item.arrow.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), vector.clone().normalize());
+}
+
+function makeVectors(scene, container) {
   const group = new THREE.Group();
-  const disc = new THREE.Mesh(new THREE.CircleGeometry(ZONE_RADIUS, 120), material);
-  disc.renderOrder = 2;
-  group.add(disc);
+  const arrows = {};
+  for (const key of VECTOR_KEYS) arrows[key] = makeArrow(group);
 
-  const makeLine = (colour) => {
-    const geometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
-    const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: colour, transparent: true, opacity: 0.95 }));
-    line.renderOrder = 3;
+  const makeDashed = () => {
+    const geometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0.01, 0)]);
+    const line = new THREE.Line(geometry, new THREE.LineDashedMaterial({
+      color: 0x9AA3B2, dashSize: 0.003, gapSize: 0.002, depthTest: false,
+    }));
+    line.renderOrder = 9;
     group.add(line);
     return line;
   };
-  const ankleLine = makeLine(0x93C5FD);
-  const subtalarLine = makeLine(0xF9A8D4);
+  const dashes = [makeDashed(), makeDashed()];
   group.visible = false;
   scene.add(group);
 
   const labelBox = document.createElement("div");
-  labelBox.className = "zone-labels";
+  labelBox.className = "vector-labels";
   labelBox.hidden = true;
   const labels = {};
-  for (const zone of ZONES) {
+  for (const key of VECTOR_KEYS) {
     const element = document.createElement("span");
-    element.className = "zone-label";
-    element.style.color = zone.colour;
-    element.style.borderColor = zone.colour;
-    element.textContent = zone.label;
+    // the total and the dorsiflexion part are nearly parallel, so their labels sit on opposite sides
+    element.className = "vector-label" + (key === "ankle" ? " below" : key === "subtalar" ? " side" : "");
     labelBox.appendChild(element);
-    labels[zone.key] = element;
+    labels[key] = element;
   }
+  const inset = document.createElement("div");
+  inset.className = "vector-inset";
+  labelBox.appendChild(inset);
   container.appendChild(labelBox);
-
-  return { group, disc, uniforms, ankleLine, subtalarLine, labelBox, labels, anchors: {} };
+  return { group, arrows, dashes, labelBox, labels, inset, anchors: {} };
 }
 
-function zoneAt(point, insertion, ankleCentre, ankleAxis, subtalarCentre, subtalarAxis) {
-  const toInsertion = new THREE.Vector3().subVectors(insertion, point);
-  const ankle = ankleAxis.dot(new THREE.Vector3().crossVectors(toInsertion, new THREE.Vector3().subVectors(point, ankleCentre)));
-  const subtalar = subtalarAxis.dot(new THREE.Vector3().crossVectors(toInsertion, new THREE.Vector3().subVectors(point, subtalarCentre)));
-  return (ankle > 0 ? "df" : "pf") + (subtalar > 0 ? "Inv" : "Ev");
-}
-
-function updateZones() {
-  const zones = three.zones;
-  if (!zones) return;
-  const axes = state.scene && state.scene.axes;
-  const donor = state.scene && state.scene.paths.tib_post_l;
-  const show = Boolean(state.showZones && axes && donor && tibiaFrame());
-  zones.group.visible = show;
-  zones.labelBox.hidden = !show;
-  if (!show) return;
-
-  const frame = tibiaFrame();
-  const point = state.config.retinaculum_point;
-  const centre = fromTibiaLocal([0.01, point.y, 0]);
-  const up = new THREE.Vector3(frame.R[0][1], frame.R[1][1], frame.R[2][1]).normalize();
-  zones.disc.position.copy(centre);
-  zones.disc.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), up);
-
-  const insertion = new THREE.Vector3(...donor[donor.length - 1][1]);
-  const ankleCentre = new THREE.Vector3(...axes.ankle.centre);
-  const ankleAxis = new THREE.Vector3(...axes.ankle.direction).normalize();
-  const subtalarCentre = new THREE.Vector3(...axes.subtalar.centre);
-  const subtalarAxis = new THREE.Vector3(...axes.subtalar.direction).normalize();
-  zones.uniforms.insertion.value.copy(insertion);
-  zones.uniforms.ankleCentre.value.copy(ankleCentre);
-  zones.uniforms.ankleAxis.value.copy(ankleAxis);
-  zones.uniforms.subtalarCentre.value.copy(subtalarCentre);
-  zones.uniforms.subtalarAxis.value.copy(subtalarAxis);
-
-  const placeLine = (line, middle, direction) => {
-    const positions = line.geometry.attributes.position;
-    const half = direction.clone().multiplyScalar(0.07);
-    positions.setXYZ(0, middle.x - half.x, middle.y - half.y, middle.z - half.z);
-    positions.setXYZ(1, middle.x + half.x, middle.y + half.y, middle.z + half.z);
-    positions.needsUpdate = true;
-    line.geometry.computeBoundingSphere();
-  };
-  placeLine(zones.ankleLine, ankleCentre, ankleAxis);
-  placeLine(zones.subtalarLine, subtalarCentre, subtalarAxis);
-
-  // each label sits at the average of the disc samples that fall in its zone
-  const across = new THREE.Vector3(frame.R[0][0], frame.R[1][0], frame.R[2][0]).normalize();
-  const side = new THREE.Vector3().crossVectors(up, across).normalize();
-  const sums = {};
-  for (const zone of ZONES) sums[zone.key] = { total: new THREE.Vector3(), count: 0 };
-  for (let ring = 1; ring <= 6; ring++) {
-    const radius = ZONE_RADIUS * (0.12 + ring * 0.12);
-    for (let step = 0; step < 48; step++) {
-      const angle = step / 48 * Math.PI * 2;
-      const sample = centre.clone()
-        .addScaledVector(across, Math.cos(angle) * radius)
-        .addScaledVector(side, Math.sin(angle) * radius);
-      const key = zoneAt(sample, insertion, ankleCentre, ankleAxis, subtalarCentre, subtalarAxis);
-      sums[key].total.add(sample);
-      sums[key].count += 1;
+function valueAtAngle(angles, values, angle) {
+  if (angle <= angles[0]) return values[0];
+  for (let i = 1; i < angles.length; i++) {
+    if (angle <= angles[i]) {
+      const t = (angle - angles[i - 1]) / (angles[i] - angles[i - 1]);
+      return values[i - 1] + t * (values[i] - values[i - 1]);
     }
   }
-  for (const zone of ZONES) {
-    const sum = sums[zone.key];
-    zones.anchors[zone.key] = sum.count > 8 ? sum.total.divideScalar(sum.count) : null;
-  }
+  return values[values.length - 1];
 }
 
-function positionZoneLabels() {
-  const zones = three.zones;
-  if (!zones || zones.labelBox.hidden) return;
+function updateVectors() {
+  const vectors = three.vectors;
+  if (!vectors) return;
+  const axes = state.scene && state.scene.axes;
+  const result = state.result;
+  const show = Boolean(state.showVectors && axes && result);
+  vectors.group.visible = show;
+  vectors.labelBox.hidden = !show;
+  if (!show) return;
+
+  const angle = Number.isFinite(state.scene.ankle_deg) ? state.scene.ankle_deg : state.ankle;
+  const ankleNm = valueAtAngle(result.angles, result.dorsi_moment, angle);
+  const subtalarNm = valueAtAngle(result.angles, result.hindfoot_moment, angle);
+  const origin = new THREE.Vector3(...axes.ankle.centre);
+  const ankleVector = new THREE.Vector3(...axes.ankle.direction).normalize().multiplyScalar(ankleNm * VECTOR_SCALE);
+  const subtalarVector = new THREE.Vector3(...axes.subtalar.direction).normalize().multiplyScalar(subtalarNm * VECTOR_SCALE);
+  const totalVector = ankleVector.clone().add(subtalarVector);
+
+  const parts = {
+    ankle: [ankleVector, Math.abs(ankleNm), ankleNm >= 0 ? "Dorsiflexion" : "Plantarflexion", ankleNm >= 0 ? "#58A6FF" : "#F0883E", 0.0019, 11],
+    subtalar: [subtalarVector, Math.abs(subtalarNm), subtalarNm >= 0 ? "Supination" : "Pronation", subtalarNm >= 0 ? "#3FB950" : "#F85149", 0.0019, 12],
+    total: [totalVector, totalVector.length() / VECTOR_SCALE, "Total", "#F0F6FC", 0.0027, 13],
+  };
+  for (const key of VECTOR_KEYS) {
+    const [vector, size, name, colour, radius, order] = parts[key];
+    const item = vectors.arrows[key];
+    if (size < VECTOR_MIN_NM) {
+      item.arrow.visible = false;
+      vectors.anchors[key] = null;
+      continue;
+    }
+    setArrow(item, origin, vector, radius, colour, order);
+    const label = vectors.labels[key];
+    label.textContent = name + " " + num(size, 1) + " Nm";
+    label.style.color = colour;
+    label.style.borderColor = colour;
+    vectors.anchors[key] = origin.clone().add(vector);
+  }
+
+  const ankleUnit = new THREE.Vector3(...axes.ankle.direction).normalize();
+  const subtalarUnit = new THREE.Vector3(...axes.subtalar.direction).normalize();
+  vectors.inset.innerHTML = vectorInsetSvg(ankleNm, subtalarNm, ankleUnit.dot(subtalarUnit));
+
+  // the dashed lines close the parallelogram, so the two parts visibly add up to the total
+  const both = Math.abs(ankleNm) >= VECTOR_MIN_NM && Math.abs(subtalarNm) >= VECTOR_MIN_NM;
+  const tipTotal = origin.clone().add(totalVector);
+  const starts = [origin.clone().add(ankleVector), origin.clone().add(subtalarVector)];
+  vectors.dashes.forEach((line, index) => {
+    line.visible = both;
+    const positions = line.geometry.attributes.position;
+    positions.setXYZ(0, starts[index].x, starts[index].y, starts[index].z);
+    positions.setXYZ(1, tipTotal.x, tipTotal.y, tipTotal.z);
+    positions.needsUpdate = true;
+    line.geometry.computeBoundingSphere();
+    line.computeLineDistances();
+  });
+}
+
+// A flat drawing of the same vectors in the plane that holds both axes, so
+// the lengths are true whatever the camera angle. The ankle axis runs to
+// the right, and the subtalar axis sits at its real angle from it.
+function vectorInsetSvg(ankleNm, subtalarNm, cosAngle) {
+  const width = 262;
+  const height = 214;
+  const centreX = 122;
+  const centreY = 112;
+  const pxPerNm = 2.0;
+  const sinAngle = Math.sqrt(Math.max(0, 1 - cosAngle * cosAngle));
+  const xy = (u, v) => [centreX + u * pxPerNm, centreY - v * pxPerNm];
+  const ankleTip = [ankleNm, 0];
+  const subtalarTip = [subtalarNm * cosAngle, subtalarNm * sinAngle];
+  const totalTip = [ankleTip[0] + subtalarTip[0], ankleTip[1] + subtalarTip[1]];
+  const totalNm = Math.hypot(totalTip[0], totalTip[1]);
+  const ankleColour = ankleNm >= 0 ? "#58A6FF" : "#F0883E";
+  const subtalarColour = subtalarNm >= 0 ? "#3FB950" : "#F85149";
+  const font = 'font-family="Segoe UI, system-ui, sans-serif"';
+
+  const marker = (id, colour) => '<marker id="' + id + '" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="3.4" ' +
+    'markerHeight="3.4" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="' + colour + '"/></marker>';
+  const segment = (from, to, colour, strokeWidth, extra) => {
+    const a = xy(from[0], from[1]);
+    const b = xy(to[0], to[1]);
+    return '<line x1="' + a[0].toFixed(1) + '" y1="' + a[1].toFixed(1) + '" x2="' + b[0].toFixed(1) + '" y2="' + b[1].toFixed(1) +
+      '" stroke="' + colour + '" stroke-width="' + strokeWidth + '" stroke-linecap="round" ' + (extra || "") + "/>";
+  };
+  const label = (point, words, colour, anchor) => {
+    const p = xy(point[0], point[1]);
+    return '<text x="' + p[0].toFixed(1) + '" y="' + p[1].toFixed(1) + '" ' + font + ' font-size="9.5" fill="' + colour +
+      '" text-anchor="' + anchor + '">' + words + "</text>";
+  };
+
+  const reach = 112 / pxPerNm;
+  let svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height + '" viewBox="0 0 ' + width + " " + height + '">';
+  svg += "<defs>" + marker("vecA", ankleColour) + marker("vecS", subtalarColour) + marker("vecT", "#F0F6FC") + "</defs>";
+  svg += '<text x="4" y="13" ' + font + ' font-size="10.5" font-weight="600" fill="#E6E8EE">True length, in the plane of both axes</text>';
+
+  svg += segment([-reach, 0], [reach, 0], "#4A5262", 1, 'stroke-dasharray="3 3"');
+  // the subtalar guide is shorter so its label stays clear of the title
+  const subtalarReach = 80 / pxPerNm;
+  svg += segment([-subtalarReach * cosAngle, -subtalarReach * sinAngle], [subtalarReach * cosAngle, subtalarReach * sinAngle], "#4A5262", 1, 'stroke-dasharray="3 3"');
+  svg += label([reach, 7 / pxPerNm], "ankle axis", "#9AA3B2", "end");
+  svg += label([subtalarReach * cosAngle + 6 / pxPerNm, subtalarReach * sinAngle - 4 / pxPerNm], "subtalar axis", "#9AA3B2", "start");
+
+  const showAnkle = Math.abs(ankleNm) >= VECTOR_MIN_NM;
+  const showSubtalar = Math.abs(subtalarNm) >= VECTOR_MIN_NM;
+  if (showAnkle && showSubtalar) {
+    svg += segment(ankleTip, totalTip, "#9AA3B2", 1, 'stroke-dasharray="4 3"');
+    svg += segment(subtalarTip, totalTip, "#9AA3B2", 1, 'stroke-dasharray="4 3"');
+  }
+  if (showAnkle) svg += segment([0, 0], ankleTip, ankleColour, 3, 'marker-end="url(#vecA)"');
+  if (showSubtalar) svg += segment([0, 0], subtalarTip, subtalarColour, 3, 'marker-end="url(#vecS)"');
+  if (totalNm >= VECTOR_MIN_NM) svg += segment([0, 0], totalTip, "#F0F6FC", 3.5, 'marker-end="url(#vecT)"');
+  svg += '<circle cx="' + centreX + '" cy="' + centreY + '" r="2.5" fill="#E6E8EE"/>';
+
+  const degrees = Math.round(Math.acos(Math.max(-1, Math.min(1, cosAngle))) * 180 / Math.PI);
+  svg += '<text x="4" y="' + (height - 6) + '" ' + font + ' font-size="10" fill="#9AA3B2">Axes ' + degrees +
+    "° apart, total " + num(totalNm, 1) + " Nm</text>";
+  svg += "</svg>";
+  return svg;
+}
+
+function positionVectorLabels() {
+  const vectors = three.vectors;
+  if (!vectors || vectors.labelBox.hidden) return;
   const width = three.container.clientWidth;
   const height = three.container.clientHeight;
-  for (const zone of ZONES) {
-    const element = zones.labels[zone.key];
-    const anchor = zones.anchors[zone.key];
+  for (const key of VECTOR_KEYS) {
+    const element = vectors.labels[key];
+    const anchor = vectors.anchors[key];
     if (!anchor) {
       element.hidden = true;
       continue;
