@@ -2145,12 +2145,19 @@ function updateScene() {
 // part along the subtalar axis, both straight from the engine's moments.
 // Anatomical: the same moment split along the tibia's own three axes into
 // inversion or eversion, adduction or abduction, dorsiflexion or
-// plantarflexion, drawn end to end so the three parts visibly add up to the
-// whole. The Split switch on the plots decides whether the ankle joint is
-// included.
+// plantarflexion. The three parts start from the same point, so they fan out
+// along three different directions, and the whole moment is the diagonal of
+// the box they make. The Split switch on the plots decides whether the ankle
+// joint is included.
+//
+// Lengths are rescaled so the longest arrow is always VECTOR_LENGTH long. The
+// labels carry the true size in Nm, so the picture stays readable whether the
+// moment is 5 Nm or 50 Nm.
 
-const VECTOR_SCALE = 0.0024;   // metres per Nm, so 40 Nm draws as 9.6 cm
+const VECTOR_LENGTH = 0.075;   // metres, length of the longest arrow on screen
 const VECTOR_MIN_NM = 0.3;     // smaller parts are hidden
+const LABEL_GAP_PX = 10;       // gap between an arrow tip and its label
+const FORESHORTENED_PX = 14;   // an arrow shorter than this on screen points at or away from the viewer
 const VECTOR_KEYS = ["total", "ankle", "subtalar", "part0", "part1", "part2"];
 
 function makeArrow(group) {
@@ -2205,8 +2212,7 @@ function makeVectors(scene, container) {
   const labels = {};
   for (const key of VECTOR_KEYS) {
     const element = document.createElement("span");
-    // the total and the dorsiflexion part are nearly parallel, so their labels sit on opposite sides
-    element.className = "vector-label" + (key === "ankle" ? " below" : key === "total" ? "" : " side");
+    element.className = "vector-label";  // placed beyond the arrow tip in positionVectorLabels
     element.dataset.key = key;
     labelBox.appendChild(element);
     labels[key] = element;
@@ -2227,13 +2233,13 @@ function renderVectorLegend() {
       : arrow(SIDE_COLOURS.supination, "Supination") + arrow(SIDE_COLOURS.pronation, "Pronation")) +
       arrow(PART_COLOURS[0], "Inversion or eversion") + arrow(PART_COLOURS[1], "Adduction or abduction") +
       arrow(PART_COLOURS[2], "Dorsiflexion or plantarflexion") +
-      '<span class="vector-note">The transfer\'s moment at the ankle angle shown, at full activation, split along the tibia\'s three axes and drawn end to end from the ankle joint centre, so the three coloured parts add up to the whole. ' +
+      '<span class="vector-note">The transfer\'s moment at the ankle angle shown, at full activation, split along the tibia\'s three axes. The three coloured parts start from the ankle joint centre and the whole moment is the diagonal of the box they make. The longest arrow is always drawn the same length, so read the size from the labels. ' +
       (both ? "Both joints are included. " : "Only the subtalar joint is split. ") +
       "Use Split above the parts plot to change this. Arrows follow the right-hand rule.</span>";
   } else {
     legend.innerHTML = arrow("#F0F6FC", "Total moment") + arrow("#58A6FF", "Dorsiflexion") + arrow("#F0883E", "Plantarflexion") +
       arrow("#3FB950", "Pronation") + arrow("#F85149", "Supination") +
-      '<span class="vector-note">The transfer\'s moment at the ankle angle shown, at full activation, drawn from the ankle joint centre. ' +
+      '<span class="vector-note">The transfer\'s moment at the ankle angle shown, at full activation, drawn from the ankle joint centre. The longest arrow is always drawn the same length, so read the size from the labels. ' +
       "The dorsiflexion or plantarflexion arrow lies along the ankle axis, and the supination or pronation arrow along the subtalar axis. " +
       "The dashed lines show the two parts adding up to the total. Arrows follow the right-hand rule.</span>";
   }
@@ -2264,22 +2270,25 @@ function updateVectors() {
   const ankleNm = valueAtAngle(result.angles, result.dorsi_moment, angle);
   const subtalarNm = valueAtAngle(result.angles, result.hindfoot_moment, angle);
   const origin = new THREE.Vector3(...axes.ankle.centre);
-  const ankleVector = new THREE.Vector3(...axes.ankle.direction).normalize().multiplyScalar(ankleNm * VECTOR_SCALE);
-  const subtalarVector = new THREE.Vector3(...axes.subtalar.direction).normalize().multiplyScalar(subtalarNm * VECTOR_SCALE);
+  // vectors in Nm first, then one gain so the longest arrow is VECTOR_LENGTH
+  const ankleVector = new THREE.Vector3(...axes.ankle.direction).normalize().multiplyScalar(ankleNm);
+  const subtalarVector = new THREE.Vector3(...axes.subtalar.direction).normalize().multiplyScalar(subtalarNm);
 
-  const draw = (key, start, vector, size, name, colour, radius, order, anchor) => {
+  const draw = (key, start, vectorNm, gain, name, colour, radius, order) => {
     const item = vectors.arrows[key];
+    const size = vectorNm.length();
     if (size < VECTOR_MIN_NM) {
       item.arrow.visible = false;
       vectors.anchors[key] = null;
       return;
     }
+    const vector = vectorNm.clone().multiplyScalar(gain);
     setArrow(item, start, vector, radius, colour, order);
     const label = vectors.labels[key];
-    label.textContent = name + " " + num(size, 1) + " Nm";
+    label.dataset.text = name + " " + num(size, 1) + " Nm";
     label.style.color = colour;
     label.style.borderColor = colour;
-    vectors.anchors[key] = anchor;
+    vectors.anchors[key] = { base: start.clone(), tip: start.clone().add(vector) };
   };
   const hide = (key) => {
     vectors.arrows[key].arrow.visible = false;
@@ -2295,20 +2304,17 @@ function updateVectors() {
     const tibiaAxes = [0, 1, 2].map((j) => new THREE.Vector3(R[0][j], R[1][j], R[2][j]).normalize());
     const along = tibiaAxes.map((axis) => whole.dot(axis));
     // inversion is minus x, adduction is minus y, dorsiflexion is plus z
-    const values = [-along[0] / VECTOR_SCALE, -along[1] / VECTOR_SCALE, along[2] / VECTOR_SCALE];
+    const values = [-along[0], -along[1], along[2]];
+    const gain = VECTOR_LENGTH / Math.max(whole.length(), 1e-6);  // the whole moment is the longest
 
-    const start = origin.clone();
     ["part0", "part1", "part2"].forEach((key, k) => {
-      const vector = tibiaAxes[k].clone().multiplyScalar(along[k]);
       const word = values[k] >= 0 ? PART_WORDS[k][0] : PART_WORDS[k][1];
-      draw(key, start.clone(), vector, Math.abs(values[k]), word, PART_COLOURS[k], 0.0019, 11 + k,
-        start.clone().addScaledVector(vector, 0.5));
-      start.add(vector);
+      draw(key, origin, tibiaAxes[k].clone().multiplyScalar(along[k]), gain, word, PART_COLOURS[k], 0.0019, 11 + k);
     });
-    const wholeNm = whole.length() / VECTOR_SCALE;
+    const wholeNm = whole.length();
     const wholeName = both ? "Total" : subtalarNm >= 0 ? "Supination" : "Pronation";
     const wholeColour = both ? "#F0F6FC" : subtalarNm >= 0 ? SIDE_COLOURS.supination : SIDE_COLOURS.pronation;
-    draw("total", origin, whole, wholeNm, wholeName, wholeColour, 0.0024, 14, origin.clone().add(whole));
+    draw("total", origin, whole, gain, wholeName, wholeColour, 0.0024, 14);
     hide("ankle");
     hide("subtalar");
     vectors.dashes.forEach((line) => { line.visible = false; });
@@ -2317,11 +2323,12 @@ function updateVectors() {
   }
 
   const totalVector = ankleVector.clone().add(subtalarVector);
-  draw("ankle", origin, ankleVector, Math.abs(ankleNm), ankleNm >= 0 ? "Dorsiflexion" : "Plantarflexion",
-    ankleNm >= 0 ? "#58A6FF" : "#F0883E", 0.0019, 11, origin.clone().add(ankleVector));
-  draw("subtalar", origin, subtalarVector, Math.abs(subtalarNm), subtalarNm >= 0 ? "Supination" : "Pronation",
-    subtalarNm >= 0 ? SIDE_COLOURS.supination : SIDE_COLOURS.pronation, 0.0019, 12, origin.clone().add(subtalarVector));
-  draw("total", origin, totalVector, totalVector.length() / VECTOR_SCALE, "Total", "#F0F6FC", 0.0027, 13, origin.clone().add(totalVector));
+  const gain = VECTOR_LENGTH / Math.max(totalVector.length(), Math.abs(ankleNm), Math.abs(subtalarNm), 1e-6);
+  draw("ankle", origin, ankleVector, gain, ankleNm >= 0 ? "Dorsiflexion" : "Plantarflexion",
+    ankleNm >= 0 ? "#58A6FF" : "#F0883E", 0.0019, 11);
+  draw("subtalar", origin, subtalarVector, gain, subtalarNm >= 0 ? "Supination" : "Pronation",
+    subtalarNm >= 0 ? SIDE_COLOURS.supination : SIDE_COLOURS.pronation, 0.0019, 12);
+  draw("total", origin, totalVector, gain, "Total", "#F0F6FC", 0.0027, 13);
   ["part0", "part1", "part2"].forEach(hide);
 
   const ankleUnit = new THREE.Vector3(...axes.ankle.direction).normalize();
@@ -2330,8 +2337,8 @@ function updateVectors() {
 
   // the dashed lines close the parallelogram, so the two parts visibly add up to the total
   const bothShown = Math.abs(ankleNm) >= VECTOR_MIN_NM && Math.abs(subtalarNm) >= VECTOR_MIN_NM;
-  const tipTotal = origin.clone().add(totalVector);
-  const starts = [origin.clone().add(ankleVector), origin.clone().add(subtalarVector)];
+  const tipTotal = origin.clone().addScaledVector(totalVector, gain);
+  const starts = [origin.clone().addScaledVector(ankleVector, gain), origin.clone().addScaledVector(subtalarVector, gain)];
   vectors.dashes.forEach((line, index) => {
     line.visible = bothShown;
     const positions = line.geometry.attributes.position;
@@ -2446,17 +2453,50 @@ function positionVectorLabels() {
   if (!vectors || vectors.labelBox.hidden) return;
   const width = three.container.clientWidth;
   const height = three.container.clientHeight;
+  const toScreen = (point) => {
+    const p = point.clone().project(three.camera);
+    return { x: (p.x + 1) / 2 * width, y: (1 - p.y) / 2 * height, z: p.z };
+  };
   for (const key of VECTOR_KEYS) {
     const element = vectors.labels[key];
-    const anchor = vectors.anchors[key];
-    if (!anchor) {
+    const info = vectors.anchors[key];
+    if (!info) {
       element.hidden = true;
       continue;
     }
-    const projected = anchor.clone().project(three.camera);
-    element.hidden = projected.z > 1;
-    element.style.left = ((projected.x + 1) / 2 * width).toFixed(1) + "px";
-    element.style.top = ((1 - projected.y) / 2 * height).toFixed(1) + "px";
+    const base = toScreen(info.base);
+    const tip = toScreen(info.tip);
+    element.hidden = tip.z > 1;
+    let dx = tip.x - base.x;
+    let dy = tip.y - base.y;
+    const length = Math.hypot(dx, dy);
+    let text = element.dataset.text || "";
+    if (length < FORESHORTENED_PX) {
+      // seen end on, the arrow is only a dot, so say which way it points
+      text += tip.z < base.z ? " · points at you" : " · points away";
+      dx = 1;
+      dy = 0;
+    } else {
+      dx /= length;
+      dy /= length;
+    }
+    element.textContent = text;
+    element.style.left = (tip.x + dx * LABEL_GAP_PX).toFixed(1) + "px";
+    element.style.top = (tip.y + dy * LABEL_GAP_PX).toFixed(1) + "px";
+    // the label grows away from the tip, on the side the arrow points to
+    element.style.transform = "translate(" + ((dx - 1) * 50).toFixed(0) + "%, " + ((dy - 1) * 50).toFixed(0) + "%)";
+  }
+  // a label that would run off the edge of the viewer is slid back inside it
+  const frame = three.container.getBoundingClientRect();
+  for (const key of VECTOR_KEYS) {
+    const element = vectors.labels[key];
+    if (element.hidden) continue;
+    const rect = element.getBoundingClientRect();
+    if (rect.width === 0) continue;
+    const shiftX = Math.max(0, frame.left + 4 - rect.left) - Math.max(0, rect.right - (frame.right - 4));
+    const shiftY = Math.max(0, frame.top + 4 - rect.top) - Math.max(0, rect.bottom - (frame.bottom - 4));
+    if (shiftX) element.style.left = (parseFloat(element.style.left) + shiftX).toFixed(1) + "px";
+    if (shiftY) element.style.top = (parseFloat(element.style.top) + shiftY).toFixed(1) + "px";
   }
   // labels whose boxes overlap are pushed down until they clear the one above
   const boxes = VECTOR_KEYS.map((key) => vectors.labels[key])
