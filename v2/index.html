@@ -1,0 +1,2824 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tendon Transfer Planner</title>
+<style>
+:root {
+  --ink: #E6E8EE; --muted: #9AA3B2; --faint: #1F2430; --line: #2A303C;
+  --bg: #0D1117; --panel: #161B22; --raised: #1C222B;
+  --green: #3FB950; --red: #F85149; --purple: #A78BFA; --amber: #D29922; --blue: #58A6FF; --teal: #2DD4BF;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 14px/1.45 "Segoe UI", system-ui, -apple-system, sans-serif; }
+header { display: flex; align-items: center; gap: 12px 16px; padding: 12px 20px; background: rgba(13, 17, 23, .92);
+  backdrop-filter: blur(8px); flex-wrap: wrap; border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
+header h1 { font-size: 17px; margin: 0; font-weight: 650; letter-spacing: .2px; }
+header .model { color: var(--muted); font-size: 12.5px; }
+.mode { font-size: 11.5px; padding: 2px 9px; border-radius: 10px; background: rgba(167, 139, 250, .14); color: #C4B5FD;
+  font-weight: 600; border: 1px solid rgba(167, 139, 250, .32); }
+header .status { margin-left: auto; font-size: 12.5px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: #4A5262; }
+.dot.busy { background: var(--amber); animation: pulse 1s infinite; }
+.dot.ok { background: var(--green); }
+.dot.err { background: var(--red); }
+@keyframes pulse { 50% { opacity: .35; } }
+.error { display: none; margin: 12px 20px 0; padding: 10px 14px; border-radius: 8px; background: rgba(248, 81, 73, .12);
+  color: #FFA198; border: 1px solid rgba(248, 81, 73, .4); font-size: 13px; }
+.error.show { display: block; }
+
+main.layout { display: grid; grid-template-columns: 250px minmax(340px, 1fr) minmax(340px, 1fr);
+  grid-template-areas: "controls viewer plots" "numbers numbers numbers"; gap: 14px; padding: 14px 20px 8px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .25); }
+.controls { grid-area: controls; padding: 14px 16px; }
+.viewer-panel { grid-area: viewer; display: flex; flex-direction: column; min-height: 660px; overflow: hidden; min-width: 0; }
+.plots { grid-area: plots; display: flex; flex-direction: column; min-width: 0; padding: 10px 12px 12px; }
+.numbers { grid-area: numbers; display: grid; grid-template-columns: minmax(250px, 320px) minmax(0, 1fr) minmax(300px, 400px);
+  gap: 14px; align-items: start; }
+.numbers-left { display: flex; flex-direction: column; gap: 12px; }
+
+.section-title { font-size: 11.5px; font-weight: 650; text-transform: uppercase; letter-spacing: .7px;
+  color: var(--muted); margin: 0 0 12px; }
+.control { margin-bottom: 20px; }
+.label-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; font-weight: 600; }
+.value { font-weight: 650; color: var(--purple); font-variant-numeric: tabular-nums; }
+.value.teal { color: var(--teal); }
+.value.warn { color: var(--red); }
+.note { font-size: 12px; color: var(--muted); margin-top: 6px; }
+.scale-row { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--muted); margin-top: 2px; gap: 6px; }
+.slider-wrap { position: relative; padding-bottom: 16px; }
+.ticks { position: absolute; left: 9px; right: 9px; bottom: 0; height: 14px; }
+.tick { position: absolute; transform: translateX(-50%); font-size: 10.5px; color: var(--muted); white-space: nowrap; line-height: 1; }
+.tick i { display: block; width: 1px; height: 5px; background: #4A5262; margin: 0 auto 2px; }
+
+input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 22px; background: transparent; margin: 0; }
+input[type=range]:focus { outline: none; }
+input[type=range]::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: var(--track, #2A303C); }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; margin-top: -6px;
+  border-radius: 50%; background: var(--panel); border: 2.5px solid var(--thumb, var(--purple)); box-shadow: 0 0 0 3px rgba(0, 0, 0, .3); cursor: grab; }
+input[type=range]::-moz-range-track { height: 6px; border-radius: 3px; background: var(--track, #2A303C); }
+input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--panel);
+  border: 2.5px solid var(--thumb, var(--purple)); cursor: grab; }
+
+.chip { border: 1px solid var(--line); background: transparent; border-radius: 12px; padding: 1px 9px; font: inherit;
+  font-size: 11px; cursor: pointer; color: var(--ink); }
+.chip.active { background: var(--teal); border-color: var(--teal); color: #0D1117; font-weight: 600; }
+.insertions { display: flex; gap: 6px; justify-content: space-between; }
+.ins { width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--kind); background: var(--panel);
+  color: var(--ink); font-weight: 650; cursor: pointer; font-size: 13px; padding: 0; }
+.ins.active { background: var(--kind); color: #0D1117; }
+.ins-name { font-weight: 600; margin-top: 8px; font-size: 13px; }
+.badge { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 10.5px; font-weight: 650;
+  color: #0D1117; background: var(--kind); margin-right: 4px; vertical-align: 1px; }
+.segmented { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.segmented button { flex: 1; border: 0; background: transparent; padding: 7px 4px; font: inherit; font-size: 12.5px; cursor: pointer; color: var(--ink); }
+.segmented button + button { border-left: 1px solid var(--line); }
+.segmented button.active { background: var(--purple); color: #0D1117; font-weight: 600; }
+.presets { display: flex; gap: 8px; }
+button.ghost, .presets button, .exports button { border: 1px solid var(--line); background: transparent; border-radius: 8px;
+  padding: 7px 12px; font: inherit; font-size: 12.5px; cursor: pointer; color: var(--ink); }
+button.ghost:hover, .presets button:hover, .exports button:hover { background: var(--raised); }
+button.small { padding: 3px 9px; font-size: 11.5px; }
+button.ghost[aria-pressed="false"] { color: var(--muted); }
+button.ghost[aria-pressed="true"] { border-color: rgba(167, 139, 250, .45); }
+
+.viewer-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 14px;
+  border-bottom: 1px solid var(--faint); }
+.hint { font-size: 11.5px; color: var(--muted); text-align: right; }
+.viewer { flex: 1; position: relative; background: #0B0E14; min-height: 420px; touch-action: none; overflow: hidden; }
+.viewer canvas { display: block; position: absolute; inset: 0; }
+.viewer-msg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  text-align: center; padding: 30px; color: var(--muted); }
+.viewer-foot { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-top: 1px solid var(--faint); flex-wrap: wrap; }
+.viewer-foot label { font-size: 12.5px; white-space: nowrap; }
+.viewer-foot input { flex: 1; min-width: 140px; }
+.legend { gap: 6px 16px; font-size: 11.5px; color: var(--muted); }
+.legend i { display: inline-block; width: 14px; height: 4px; border-radius: 2px; margin-right: 5px; vertical-align: 2px; }
+.legend b { display: inline-block; width: 11px; height: 11px; border-radius: 50%; border: 2.5px solid; margin-right: 5px; vertical-align: -1px; }
+
+.plots-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+.plots-head .section-title { margin: 0; }
+.plot-legend { display: flex; gap: 4px 12px; flex-wrap: wrap; font-size: 11.5px; color: var(--muted); margin-bottom: 4px; }
+.sw { display: inline-block; width: 16px; height: 0; border-top: 3px solid var(--purple); margin-right: 5px; vertical-align: 3px; }
+.sw.earlier { border-top-width: 2px; border-color: rgba(167, 139, 250, .38); }
+.sw.io { border-top: 2px dashed #4EA1F3; }
+.sw.ct { border-top: 2px dashed #FF9F43; }
+.plot-buttons { display: flex; gap: 6px; }
+.chart-stack { display: grid; grid-template-columns: 1fr; gap: 2px; }
+.chart { height: 210px; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+.chart svg { display: block; }
+.hist { cursor: pointer; }
+.hist.hl .vis { stroke: #EDE9FE; stroke-opacity: 1; stroke-width: 2.4px; }
+.plot-bg { cursor: ew-resize; }
+.history-head { display: flex; justify-content: space-between; align-items: baseline; margin: 8px 0 4px; font-size: 12px; font-weight: 600; }
+.history-head span { font-weight: 400; color: var(--muted); font-size: 11.5px; }
+#history { list-style: none; margin: 0; padding: 0; max-height: 176px; overflow-y: auto; border-top: 1px solid var(--faint); }
+#history li { display: flex; gap: 8px; padding: 5px 6px; border-bottom: 1px solid var(--faint); cursor: pointer; font-size: 12px; border-radius: 6px; }
+#history li:hover, #history li.hl { background: var(--raised); }
+#history li.active { background: rgba(167, 139, 250, .14); }
+#history .num { flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--panel); border: 1.5px solid var(--purple);
+  color: var(--purple); font-weight: 700; font-size: 11px; display: flex; align-items: center; justify-content: center; }
+#history li.active .num { background: var(--purple); color: #0D1117; }
+#history .text { display: flex; flex-direction: column; min-width: 0; }
+#history small { color: var(--muted); font-size: 11px; }
+
+.verdict { border-radius: 12px; padding: 14px 16px; border: 1px solid; }
+.verdict.good { background: rgba(63, 185, 80, .12); border-color: rgba(63, 185, 80, .45); color: #7EE787; }
+.verdict.bad { background: rgba(248, 81, 73, .12); border-color: rgba(248, 81, 73, .45); color: #FFA198; }
+.verdict.pending { background: var(--panel); border-color: var(--line); color: var(--muted); }
+.verdict-main { font-size: 16px; font-weight: 700; }
+.verdict-value { font-size: 13.5px; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.verdict-sub { font-size: 12.5px; margin-top: 8px; color: var(--ink); opacity: .85; }
+.cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.card .k { font-size: 11.5px; color: var(--muted); }
+.card .v { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; margin: 2px 0; }
+.card .s { font-size: 11.5px; color: var(--muted); }
+.card .v.bad { color: var(--red); }
+.card .v.good { color: var(--green); }
+.compare { padding: 12px 14px; }
+.compare table { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.compare th { font-size: 11.5px; color: var(--muted); font-weight: 650; text-align: right; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.compare th:first-child, .compare td:first-child { text-align: left; padding-left: 0; }
+.compare td { text-align: right; padding: 5px 6px; border-bottom: 1px solid var(--faint); }
+.compare td.cur { color: var(--purple); font-weight: 650; }
+.compare td.pos { color: var(--red); }
+.compare td.neg { color: var(--green); }
+.compare td.stale { color: #4A5262; }
+.warnings { margin: 0; padding: 10px 14px 10px 30px; font-size: 12px; color: #E3B341; background: rgba(210, 153, 34, .1);
+  border: 1px solid rgba(210, 153, 34, .35); border-radius: 10px; }
+.warnings:empty { display: none; }
+footer { display: flex; gap: 20px; align-items: flex-start; justify-content: space-between; padding: 6px 20px 22px; flex-wrap: wrap; }
+.caveats { margin: 0; padding-left: 18px; font-size: 11.5px; color: var(--muted); max-width: 820px; }
+.credit { margin: 8px 0 0; font-size: 11px; color: var(--muted); max-width: 820px; }
+.credit a { color: inherit; }
+.exports { display: flex; gap: 8px; flex-wrap: wrap; }
+
+[hidden] { display: none !important; }
+.mode-link { font-size: 11.5px; color: var(--muted); text-decoration: none; border-bottom: 1px dotted var(--muted); }
+.mode-link:hover { color: var(--ink); }
+.line-chart { height: 128px; margin-top: 2px; cursor: ew-resize; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+.line-chart svg { display: block; }
+.best-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.best-row span { font-size: 11.5px; color: var(--muted); }
+.chip.gold { border-color: #FFD166; color: #FFD166; }
+.chip.gold:hover { background: rgba(255, 209, 102, .12); }
+.value.amber { color: #FFD166; }
+.segmented.mini button { padding: 3px 8px; font-size: 11.5px; }
+.chart-cell { min-width: 0; }
+.chart-tools { display: flex; align-items: center; justify-content: flex-end; gap: 8px; font-size: 11.5px;
+  color: var(--muted); margin: 6px 0 0; }
+.viewer-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.viewer-title { display: flex; align-items: center; gap: 10px; }
+.viewer-title button { white-space: nowrap; }
+.vector-labels { position: absolute; inset: 0; pointer-events: none; }
+.vector-label { position: absolute; transform: translate(-50%, -135%); font-size: 11px; font-weight: 650; padding: 1px 7px;
+  border-radius: 10px; background: rgba(13, 17, 23, .88); border: 1px solid; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.legend em.arr { font-style: normal; font-weight: 800; margin-right: 5px; }
+.vector-note { flex-basis: 100%; font-size: 11px; }
+.vector-label.below { transform: translate(-50%, 45%); }
+.vector-label.side { transform: translate(14px, -50%); }
+.vector-inset { position: absolute; right: 10px; top: 10px; background: rgba(13, 17, 23, .92);
+  border: 1px solid var(--line); border-radius: 10px; padding: 4px 6px; }
+.vector-inset svg { display: block; }
+@media (max-width: 820px) { .vector-inset { transform: scale(.78); transform-origin: top right; } }
+
+.gait-foot { align-items: flex-start; }
+.gait-foot > button { margin-top: 2px; }
+.gait-box { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 2px; }
+.gait-readout { font-size: 12.5px; color: var(--muted); }
+.gait-readout strong { color: var(--ink); font-variant-numeric: tabular-nums; }
+.gait-readout .custom { color: var(--amber); }
+.gait-spark { height: 52px; cursor: ew-resize; touch-action: pan-y; }
+.gait-spark svg { display: block; }
+/* the footer rule gives inputs flex: 1, which squashes a range to zero height inside this column */
+.gait-box input[type=range] { width: 100%; min-width: 0; flex: none; height: 22px; }
+.gait-phases { position: relative; height: 16px; font-size: 10px; color: var(--muted); }
+.gait-phase { position: absolute; top: 0; height: 16px; border-left: 1px solid var(--line); padding-left: 3px;
+  white-space: nowrap; overflow: hidden; }
+
+@media (max-width: 1280px) {
+  main.layout { grid-template-columns: 250px minmax(0, 1fr); grid-template-areas: "controls viewer" "plots plots" "numbers numbers"; }
+  .chart-stack { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .numbers { grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); }
+  .numbers .compare { grid-column: 1 / -1; }
+}
+@media (max-width: 820px) {
+  header { padding: 10px 12px; }
+  main.layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "viewer" "plots" "controls" "numbers"; padding: 10px; gap: 10px; }
+  .viewer-panel { min-height: 470px; }
+  .viewer { min-height: 340px; }
+  .chart-stack { grid-template-columns: minmax(0, 1fr); }
+  .numbers { grid-template-columns: minmax(0, 1fr); }
+  .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .hint { display: none; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Tendon Transfer Planner</h1>
+  <span class="model">Tibialis posterior transfer · OpenSim Gait2392 · left leg</span>
+  <span class="mode" id="mode">Connecting…</span>
+  <a class="mode-link" id="v1Link" href="../v1/">Version 1</a>
+  <span class="status"><span class="dot" id="dot"></span><span id="status">Loading…</span></span>
+</header>
+<div class="error" id="error"></div>
+
+<main class="layout">
+  <section class="panel controls">
+    <h2 class="section-title">Surgical choices</h2>
+
+    <div class="control">
+      <div class="label-row"><span>Route</span><span class="value" id="zValue"></span></div>
+      <div class="slider-wrap"><input type="range" id="z"><div class="ticks" id="zTicks"></div></div>
+      <div class="scale-row"><span>lateral, interosseous</span><span>medial, circumtibial</span></div>
+    </div>
+
+    <div class="control">
+      <div class="label-row"><span>Retinaculum point</span><span class="value teal" id="pValue"></span></div>
+      <div class="slider-wrap"><input type="range" id="p3" style="--thumb: var(--teal)"><div class="ticks" id="pTicks"></div></div>
+      <div class="scale-row"><span>lateral</span><button class="chip" id="pFollow" type="button">Follow route</button><span>medial</span></div>
+      <div class="note">Where the tendon passes under the extensor retinaculum. It has not been measured yet, and it largely sets the hindfoot direction.</div>
+    </div>
+
+    <div class="control">
+      <div class="label-row"><span>Insertion</span><span class="value amber" id="posValue"></span></div>
+      <div class="line-chart" id="lineChart"></div>
+      <div class="slider-wrap"><input type="range" id="pos" style="--thumb: #FFD166" aria-label="Insertion position"><div class="ticks" id="posTicks"></div></div>
+      <div class="ins-name" id="insertionName"></div>
+      <div class="note" id="insertionNote"></div>
+      <div class="best-row"><button class="chip gold" id="goBest" type="button">Go to best</button><span id="bestNote">Finding the best insertion…</span></div>
+    </div>
+
+    <div class="control">
+      <div class="label-row"><span>Window height</span><span class="value" id="hValue"></span></div>
+      <input type="range" id="h">
+      <div class="scale-row"><span id="hMin"></span><span>shaded: 7 to 10 cm target</span><span id="hMax"></span></div>
+      <div class="note" id="hDetail"></div>
+    </div>
+
+    <div class="control">
+      <div class="label-row"><span>Peroneal nerve palsy</span></div>
+      <div class="segmented" id="palsy">
+        <button data-level="none">None</button><button data-level="deep">Deep</button><button data-level="common">Common</button>
+      </div>
+    </div>
+
+    <div class="control">
+      <div class="label-row"><span>Published routes</span></div>
+      <div class="presets"><button data-preset="IO">Interosseous</button><button data-preset="CT">Circumtibial</button></div>
+    </div>
+
+    <p class="note">Tendon slack length is re-tensioned on every change, so the moment is never falsely zero.</p>
+  </section>
+
+  <section class="panel viewer-panel">
+    <div class="viewer-head">
+      <span class="viewer-title viewer-tools"><span class="section-title" style="margin:0">Model</span><button class="ghost small" id="vectorToggle" aria-pressed="true" type="button">Moment vectors</button><span class="segmented mini" id="arrowMode"><button type="button" data-mode="anatomical">Anatomical</button><button type="button" data-mode="joints">Joint axes</button></span></span>
+      <span class="hint">Drag a ring to move that point · drag elsewhere to orbit · scroll to zoom · double-click to reset</span>
+    </div>
+    <div class="viewer" id="viewer"></div>
+    <div class="viewer-foot gait-foot">
+      <button class="ghost small" id="gaitPlay" type="button" aria-pressed="false" hidden>▶ Play</button>
+      <div class="gait-box" id="gaitBox" hidden>
+        <div class="gait-readout"><strong id="gaitPct">0%</strong> of gait cycle · <span id="gaitPhase"></span> · ankle <strong id="gaitAnkle">0°</strong></div>
+        <div class="gait-spark" id="gaitSpark"></div>
+        <input type="range" id="gait" min="0" max="100" step="0.5" value="0" aria-label="Gait cycle percent">
+        <div class="gait-phases" id="gaitPhases"></div>
+      </div>
+      <span id="anklePlain">
+        <label for="ankle">View at ankle angle <strong id="ankleValue">0°</strong></label>
+        <input type="range" id="ankle" min="-20" max="20" step="1" value="0">
+      </span>
+      <button class="ghost" id="resetView">Reset view</button>
+    </div>
+    <div class="viewer-foot legend">
+      <span><b style="border-color:#A78BFA"></b>Window point</span>
+      <span><b style="border-color:#2DD4BF"></b>Retinaculum point</span>
+      <span><i style="background:#D29922"></i>Insertion line, <b style="border-color:#FFD166;width:9px;height:9px"></b>best insertion</span>
+      <span><i style="background:#3FB950"></i>Transfer, green assists pronation, red drives supination</span>
+      <span><i style="background:#58A6FF"></i>Tibialis anterior</span>
+      <span><i style="background:#D29922"></i>Peroneals</span>
+    </div>
+    <div class="viewer-foot legend" id="vectorLegend"></div>
+  </section>
+
+  <section class="panel plots">
+    <div class="plots-head">
+      <h2 class="section-title">Live plots</h2>
+      <div class="plot-buttons">
+        <button class="ghost small" id="refToggle" aria-pressed="true" type="button">IO and CT lines</button>
+        <button class="ghost small" id="clearHistory" type="button">Clear history</button>
+      </div>
+    </div>
+    <div class="plot-legend">
+      <span><i class="sw"></i>Now</span>
+      <span><i class="sw earlier"></i>Earlier, click a line to go back</span>
+      <span><i class="sw io"></i>IO</span>
+      <span><i class="sw ct"></i>CT</span>
+    </div>
+    <div class="chart-stack">
+      <div class="chart" id="chartDorsi"></div>
+      <div class="chart" id="chartSide"></div>
+      <div class="chart-cell">
+        <div class="chart-tools"><span>Split</span><span class="segmented mini" id="compMode"><button type="button" data-mode="subtalar">Subtalar joint</button><button type="button" data-mode="both">Ankle + subtalar</button></span></div>
+        <div class="chart" id="chartComp"></div>
+      </div>
+      <div class="chart" id="chartNet"></div>
+    </div>
+    <div class="history-head">History <span>click a plot to set the ankle angle</span></div>
+    <ol id="history"></ol>
+  </section>
+
+  <section class="numbers">
+    <div class="numbers-left">
+      <div class="verdict pending" id="verdict">
+        <div class="verdict-main">Computing…</div><div class="verdict-value"></div><div class="verdict-sub"></div>
+      </div>
+      <ul class="warnings" id="warnings"></ul>
+    </div>
+    <div class="cards">
+      <div class="card"><div class="k">Dorsiflexion moment</div><div class="v" id="cDf">—</div><div class="s" id="cDfSub"></div></div>
+      <div class="card"><div class="k">Dorsiflexion lever, 14° DF</div><div class="v" id="cArm">—</div><div class="s" id="cArmSub"></div></div>
+      <div class="card"><div class="k">Hindfoot, 14° DF</div><div class="v" id="cSide">—</div><div class="s" id="cSideSub"></div></div>
+      <div class="card"><div class="k">Bend at window</div><div class="v" id="cBend">—</div><div class="s" id="cBendSub"></div></div>
+      <div class="card"><div class="k">Zajac excursion</div><div class="v" id="cExc">—</div><div class="s" id="cExcSub"></div></div>
+      <div class="card"><div class="k">Net hindfoot, 14° DF</div><div class="v" id="cNet">—</div><div class="s" id="cNetSub"></div></div>
+    </div>
+    <div class="panel compare">
+      <h2 class="section-title">Current against published routes</h2>
+      <table>
+        <thead><tr><th></th><th>Current</th><th>IO</th><th>CT</th></tr></thead>
+        <tbody id="compareBody"></tbody>
+      </table>
+      <div class="note" id="compareNote"></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div>
+    <ul class="caveats" id="caveats"></ul>
+    <p class="credit">Musculoskeletal model: Gait2392 by Delp, Loan, Hoy, Zajac, Topp, Rosen, Thelen, Anderson and Seth, licensed <a href="https://creativecommons.org/licenses/by/3.0/" target="_blank" rel="noopener">CC BY 3.0</a>, with the tibialis posterior path rerouted for this planner. For research and teaching only, not for clinical decisions. Computed with <a href="https://opensim.stanford.edu/" target="_blank" rel="noopener">OpenSim</a>.</p>
+  </div>
+  <div class="exports">
+    <button id="exportCharts">Export plots PNG</button>
+    <button id="exportView">Export 3D PNG</button>
+    <button id="exportCsv">Export CSV</button>
+  </div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function () {
+"use strict";
+
+// ── settings ────────────────────────────────────────────────────────
+
+const KIND = {
+  true: { label: "true insertion", colour: "#58A6FF" },
+  interpolated: { label: "interpolated", colour: "#3FB950" },
+  relocated: { label: "on the bone surface", colour: "#7EE787" },
+  proxy: { label: "proxy location", colour: "#D29922" },
+  control: { label: "control only", colour: "#8B949E" },
+};
+const PALSY_LABEL = {
+  none: "Intact peroneal nerve",
+  deep: "Deep peroneal palsy",
+  common: "Common peroneal palsy",
+};
+// IO blue and CT orange, the same as the OpenSim models and the V2 figures
+const COLOURS = { current: "#A78BFA", IO: "#4EA1F3", CT: "#FF9F43" };
+const SIDE_COLOURS = { supination: "#F85149", pronation: "#3FB950" };
+// inversion or eversion, adduction or abduction, dorsiflexion or plantarflexion
+const PART_COLOURS = ["#F472B6", "#FACC15", "#58A6FF"];
+const PART_WORDS = [["Inversion", "Eversion"], ["Adduction", "Abduction"], ["Dorsiflexion", "Plantarflexion"]];
+const PART_SHORT = ["inv", "add", "DF"];
+const SHORT_ANCHOR = ["Nav", "Med", "Int", "Lat", "Cub", "5MT"];
+const CHECK_ANGLE = 14;     // the most dorsiflexion walking needs, the V2 selection angle
+const BEST_COLOUR = "#FFD166";
+const HOSTED_V1 = "https://iressa8655.github.io/tendon-transfer-planner/v1/";
+const HISTORY_LIMIT = 12;
+
+const state = {
+  z: -20, h: 7.53, p3: null, pos: 2.75, palsy: "common", ankle: 0, showReferences: true, showVectors: true, gait: null, gaitPct: null, gaitPlaying: false,
+  compMode: "subtalar", arrowMode: "anatomical",
+  config: null, result: null, scene: null, references: null, referencesFor: null, line: null, lineFor: null,
+};
+const history = { entries: [], nextId: 1, activeId: null, hoverId: null };
+let backend = null;
+
+// ── small helpers ───────────────────────────────────────────────────
+
+const $ = (id) => document.getElementById(id);
+const clamp = (value, low, high) => Math.min(Math.max(value, low), high);
+
+function num(value, digits = 1) {
+  return Number.isFinite(value) ? value.toFixed(digits).replace(/-/g, "−") : "—";
+}
+function signed(value, digits = 1) {
+  if (!Number.isFinite(value)) return "—";
+  const text = Math.abs(value).toFixed(digits);
+  if (Number(text) === 0) return text;
+  return (value > 0 ? "+" : "−") + text;
+}
+function esc(text) {
+  return String(text).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+function debounce(fn, wait) {
+  let timer = null;
+  return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), wait); };
+}
+
+function params() {
+  return { z: state.z, h: state.h, p3: state.p3, pos: state.pos };
+}
+function sameParams(a, b) {
+  return a.z === b.z && a.h === b.h && a.p3 === b.p3 && a.pos === b.pos;
+}
+// With no retinaculum value set, the point follows the route as in the published models
+function effectiveP3(p) {
+  const point = state.config.retinaculum_point;
+  return p.p3 === null ? point.slope * p.z + point.offset_mm : p.p3;
+}
+function referencesKey(position, height) {
+  return Number(position).toFixed(3) + "|" + Number(height).toFixed(2);
+}
+// the insertion line only depends on the route, the window height and the retinaculum point
+function lineKey(p) {
+  return [Number(p.z).toFixed(2), Number(p.h).toFixed(2), p.p3 === null ? "follows" : Number(p.p3).toFixed(2)].join("|");
+}
+function lineFresh() {
+  return Boolean(state.line) && state.lineFor === lineKey(params());
+}
+// the same wording as describe() in insertion_line.py
+function describePosition(position) {
+  const anchors = state.config.insertions;
+  const p = clamp(position, 0, anchors.length - 1);
+  const nearest = Math.round(p);
+  if (Math.abs(p - nearest) < 1e-6) return anchors[nearest].label;
+  const low = Math.min(Math.floor(p), anchors.length - 2);
+  return anchors[low].label + " to " + anchors[low + 1].label + ", " + Math.round((p - low) * 100) + "% of the way";
+}
+function exactAnchor(position) {
+  const nearest = Math.round(position);
+  return Math.abs(position - nearest) < 1e-6 ? state.config.insertions[nearest] : null;
+}
+// how many degrees of inversion, adduction and dorsiflexion one degree about each axis brings, from the engine
+function ratesAt(angle) {
+  const rates = state.config.axis_rates;
+  const index = clamp(Math.round(angle) - rates.angles[0], 0, rates.angles.length - 1);
+  return { ankle: rates.ankle[index], subtalar: rates.subtalar[index] };
+}
+// joint moments split into inversion, adduction and dorsiflexion parts, Nm, one array per part
+function anatomicalParts(result, mode) {
+  const parts = [[], [], []];
+  result.angles.forEach((angle, i) => {
+    const rate = ratesAt(angle);
+    for (let k = 0; k < 3; k++) {
+      let value = result.hindfoot_moment[i] * rate.subtalar[k];
+      if (mode === "both") value += result.dorsi_moment[i] * rate.ankle[k];
+      parts[k].push(value);
+    }
+  });
+  return parts;
+}
+function bestPosition(positions, arms) {
+  const range = state.config.line.selection_range;
+  let best = null;
+  positions.forEach((position, i) => {
+    if (position < range[0] - 1e-9 || position > range[1] + 1e-9 || !Number.isFinite(arms[i])) return;
+    if (!best || arms[i] > best.dorsi_arm_14_mm) best = { position, dorsi_arm_14_mm: arms[i] };
+  });
+  return best;
+}
+
+function setStatus(text, kind) {
+  $("status").textContent = text;
+  $("dot").className = "dot " + (kind || "");
+}
+function showError(error) {
+  console.error(error);
+  $("error").textContent = "Something went wrong: " + error.message;
+  $("error").classList.add("show");
+  setStatus("Error", "err");
+}
+function clearError() {
+  $("error").classList.remove("show");
+}
+
+async function getJSON(url) {
+  const response = await fetch(url, { cache: "no-store" });
+  let data;
+  try {
+    data = await response.json();
+  } catch (e) {
+    throw new Error(url + " did not return JSON (" + response.status + ")");
+  }
+  if (!response.ok || (data && data.error)) {
+    throw new Error(data && data.error ? data.error : "HTTP " + response.status);
+  }
+  return data;
+}
+
+// ── backend 1: the live OpenSim engine behind platform_server.py ────
+
+function queryFor(p, ankle) {
+  return new URLSearchParams({ z: p.z, h: p.h, pos: p.pos, p3: p.p3 === null ? "" : p.p3, ankle: ankle });
+}
+
+async function fetchBinary(url) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(url + " " + response.status);
+  return response.arrayBuffer();
+}
+
+const liveBackend = {
+  name: "live",
+  label: "Live OpenSim engine",
+  evaluate(job) {
+    const query = queryFor(job.params, job.ankle);
+    query.set("refs", job.refs ? "1" : "0");
+    return getJSON("api/evaluate?" + query.toString());
+  },
+  scene(p, ankle) {
+    return getJSON("api/scene?" + queryFor(p, ankle).toString());
+  },
+  line(p) {
+    return getJSON("api/line?" + queryFor(p, 0).toString());
+  },
+  prefetch() {},
+};
+
+// ── backend 2: results precomputed with the same model ──────────────
+//
+// For hosting without Python. export_static_site.py runs the engine over a
+// grid of route, retinaculum point, window height and insertion. Here the
+// grid is interpolated, and the geometry (paths, bend angles) is rebuilt
+// exactly from the model's own frames.
+
+async function loadStatic() {
+  const [config, meta, scene, geometry, lineBuffer] = await Promise.all([
+    getJSON("../data/config.json"),
+    getJSON("../data/grid_meta.json"),
+    getJSON("../data/scene.json"),
+    getJSON("../data/geometry.json"),
+    fetchBinary("../data/line.bin"),
+  ]);
+  const lineTable = new Int16Array(lineBuffer);
+  if (lineTable.length !== meta.line.shape.reduce((a, b) => a * b, 1)) throw new Error("data/line.bin is incomplete");
+  return { config, geometry, backend: makeStaticBackend(config, meta, scene, lineTable) };
+}
+
+// The grid is split by insertion position, one small file each. Only the two
+// files either side of the slider are needed to answer, the rest load in the
+// background after the first result is on screen.
+function makeStaticBackend(config, meta, scene, lineTable) {
+  const c = meta.constants;
+  const recordLength = meta.record_length;
+  const fields = {};
+  const scales = new Float64Array(recordLength);
+  let offset = 0;
+  for (const field of meta.fields) {
+    fields[field.name] = { offset, length: field.length };
+    scales.fill(field.scale, offset, offset + field.length);
+    offset += field.length;
+  }
+  const nZ = meta.z_mm.count;
+  const nP = meta.p3_mm.count;
+  const positions = meta.positions;
+  const positionSpec = { start: positions[0], step: positions[1] - positions[0], count: positions.length };
+  const chunks = new Array(positions.length).fill(null);
+  const pending = new Array(positions.length).fill(null);
+
+  function axis(value, spec) {
+    const position = (value - spec.start) / spec.step;
+    const index = clamp(Math.floor(position), 0, spec.count - 2);
+    return [index, clamp(position - index, 0, 1)];
+  }
+  function heightWeight(height) {
+    return clamp((height - meta.h_cm[0]) / (meta.h_cm[1] - meta.h_cm[0]), 0, 1);
+  }
+
+  function loadChunk(index) {
+    if (chunks[index]) return Promise.resolve(chunks[index]);
+    if (!pending[index]) {
+      const url = "../" + meta.chunk_pattern.replace("{index}", String(index).padStart(2, "0"));
+      pending[index] = fetchBinary(url).then((buffer) => {
+        const values = new Int16Array(buffer);
+        if (values.length !== meta.chunk_values) throw new Error(url + " is incomplete");
+        chunks[index] = values;
+        return values;
+      }).catch((error) => {
+        pending[index] = null;
+        throw error;
+      });
+    }
+    return pending[index];
+  }
+  function ensure(position) {
+    const [k] = axis(position, positionSpec);
+    return Promise.all([loadChunk(k), loadChunk(k + 1)]);
+  }
+
+  function record(position, height, z, p3) {
+    const [kx, tx] = axis(position, positionSpec);
+    const th = heightWeight(height);
+    const [kz, tz] = axis(z, meta.z_mm);
+    const [kp, tp] = axis(p3, meta.p3_mm);
+    const out = new Float64Array(recordLength);
+    for (const [dx, wx] of [[0, 1 - tx], [1, tx]]) {
+      if (wx === 0) continue;
+      const grid = chunks[kx + dx];
+      for (const [dh, wh] of [[0, 1 - th], [1, th]]) {
+        for (const [dz, wz] of [[0, 1 - tz], [1, tz]]) {
+          for (const [dp, wp] of [[0, 1 - tp], [1, tp]]) {
+            const weight = wx * wh * wz * wp;
+            if (weight === 0) continue;
+            const base = ((dh * nZ + kz + dz) * nP + kp + dp) * recordLength;
+            for (let n = 0; n < recordLength; n++) {
+              const code = grid[base + n];
+              out[n] += code === meta.nan_code ? NaN : weight * code / scales[n];
+            }
+          }
+        }
+      }
+    }
+    return out;
+  }
+
+  const slice = (rec, name) => Array.from(rec.subarray(fields[name].offset, fields[name].offset + fields[name].length));
+  const scalar = (rec, name) => rec[fields[name].offset];
+
+  function toGround(frame, point) {
+    const R = frame.R;
+    return [0, 1, 2].map((k) => R[k][0] * point[0] + R[k][1] * point[1] + R[k][2] * point[2] + frame.p[k]);
+  }
+  function angleAt(a, b, cc) {
+    const u = [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+    const v = [cc[0] - b[0], cc[1] - b[1], cc[2] - b[2]];
+    const cosine = (u[0] * v[0] + u[1] * v[1] + u[2] * v[2]) / (Math.hypot(...u) * Math.hypot(...v));
+    return Math.acos(clamp(cosine, -1, 1)) * 180 / Math.PI;
+  }
+  // straight line between the two anchors either side, as point_at() in insertion_line.py
+  function insertionAt(position) {
+    const anchors = c.anchors_calcn;
+    const p = clamp(position, 0, anchors.length - 1);
+    const low = Math.min(Math.floor(p), anchors.length - 2);
+    const t = p - low;
+    return [0, 1, 2].map((i) => anchors[low][i] + t * (anchors[low + 1][i] - anchors[low][i]));
+  }
+  function donorPath(p, frames) {
+    const local = [
+      c.origin,
+      [c.window_point_x, c.tip_y + p.h / 100, p.z / 1000],
+      [c.retinaculum_x, c.retinaculum_y, effectiveP3(p) / 1000],
+    ];
+    const points = local.map((point) => toGround(frames.tibia_l, point));
+    points.push(toGround(frames.calcn_l, insertionAt(p.pos)));
+    return points.map((xyz, index) => ["tib_post_l-P" + (index + 1), xyz]);
+  }
+  const neutralFrames = scene.frames[scene.angles.indexOf(0)];
+
+  // the same wording as the engine's _check_limits
+  function warnings(p) {
+    const list = [];
+    const zLimits = c.limits.via_z.map((v) => v * 1000);
+    const hLimits = c.limits.height_cm;
+    if (p.z < zLimits[0] || p.z > zLimits[1]) {
+      list.push("Mid-leg via point " + p.z.toFixed(0) + " mm is outside the " + zLimits[0].toFixed(0) +
+        " to " + zLimits[1].toFixed(0) + " mm range.");
+    }
+    if (p.h > hLimits[1]) {
+      list.push("Window " + p.h.toFixed(1) + " cm above the malleolus tip. Harvesting tendon above 12 cm is difficult.");
+    }
+    if (p.h < hLimits[0]) {
+      list.push("Window " + p.h.toFixed(1) + " cm above the malleolus tip is below the 7 cm target, so the tendon may bend sharply.");
+    }
+    return list;
+  }
+
+  function result(p) {
+    const p3 = effectiveP3(p);
+    const rec = record(p.pos, p.h, p.z, p3);
+    const path = donorPath(p, neutralFrames).map((point) => point[1]);
+    return {
+      input: {
+        via_z_mm: p.z, height_cm: p.h, height_pct_tibia: p.h / config.tibia_length_cm * 100,
+        position: p.pos, insertion: describePosition(p.pos), lower_z_mm: p3, lower_z_auto: p.p3 === null,
+      },
+      angles: meta.angles,
+      dorsi_moment: slice(rec, "dorsi_moment"),
+      hindfoot_moment: slice(rec, "hindfoot_moment"),
+      force: slice(rec, "force"),
+      net_hindfoot: { none: slice(rec, "net_none"), deep: slice(rec, "net_deep"), common: slice(rec, "net_common") },
+      neutral: {
+        dorsiflexion_pct: scalar(rec, "dorsiflexion_pct"),
+        wasted_pct: scalar(rec, "wasted_pct"),
+        norm_mm: scalar(rec, "norm_mm"),
+      },
+      zajac_excursion: scalar(rec, "zajac_excursion"),
+      bend: { window_deg: angleAt(path[0], path[1], path[2]), retinaculum_deg: angleAt(path[1], path[2], path[3]) },
+      tendon_slack_mm: scalar(rec, "tendon_slack_mm"),
+      path_length_mm: scalar(rec, "path_length_mm"),
+      warnings: warnings(p),
+    };
+  }
+
+  // levers at 0 and 14 degrees along the whole insertion line, from the small line table
+  const lineShape = meta.line.shape;
+  function lineProfile(p) {
+    const th = heightWeight(p.h);
+    const [kz, tz] = axis(p.z, meta.z_mm);
+    const [kp, tp] = axis(effectiveP3(p), meta.p3_mm);
+    const nPos = lineShape[3];
+    const nF = lineShape[4];
+    const out = meta.line.fields.map(() => new Float64Array(nPos));
+    for (const [dh, wh] of [[0, 1 - th], [1, th]]) {
+      for (const [dz, wz] of [[0, 1 - tz], [1, tz]]) {
+        for (const [dp, wp] of [[0, 1 - tp], [1, tp]]) {
+          const weight = wh * wz * wp;
+          if (weight === 0) continue;
+          const base = ((dh * nZ + kz + dz) * nP + kp + dp) * nPos * nF;
+          for (let i = 0; i < nPos; i++) {
+            for (let f = 0; f < nF; f++) {
+              const code = lineTable[base + i * nF + f];
+              out[f][i] += code === meta.nan_code ? NaN : weight * code / meta.line.scale;
+            }
+          }
+        }
+      }
+    }
+    const curves = { positions: positions.slice() };
+    meta.line.fields.forEach((name, f) => { curves[name] = Array.from(out[f]); });
+    curves.best = bestPosition(curves.positions, curves.dorsi_arm_14);
+    return curves;
+  }
+
+  function sceneAt(p, ankle) {
+    const index = clamp(Math.round(ankle) - scene.angles[0], 0, scene.angles.length - 1);
+    const frames = scene.frames[index];
+    return {
+      ankle_deg: scene.angles[index],
+      frames,
+      paths: Object.assign({ tib_post_l: donorPath(p, frames) }, scene.paths[index]),
+      axes: scene.axes ? scene.axes[index] : null,
+    };
+  }
+
+  return {
+    name: "static",
+    label: "Precomputed OpenSim results",
+    async evaluate(job) {
+      const started = performance.now();
+      await ensure(job.params.pos);
+      const out = { result: result(job.params), scene: sceneAt(job.params, job.ankle), references: null };
+      if (job.refs) {
+        out.references = {};
+        for (const tag of ["IO", "CT"]) {
+          const preset = config.presets[tag];
+          out.references[tag] = result({ z: preset.z_mm, h: job.params.h, p3: null, pos: job.params.pos });
+        }
+      }
+      out.elapsed_ms = performance.now() - started;
+      return out;
+    },
+    async scene(p, ankle) {
+      return sceneAt(p, ankle);
+    },
+    async line(p) {
+      return lineProfile(p);
+    },
+    // nearest positions first, one file at a time, so dragging later needs no waiting
+    async prefetch() {
+      const order = positions.map((position, index) => index)
+        .sort((a, b) => Math.abs(positions[a] - state.pos) - Math.abs(positions[b] - state.pos));
+      for (const index of order) {
+        try { await loadChunk(index); } catch (error) { console.warn(error); }
+      }
+    },
+  };
+}
+
+// ── asking for results ──────────────────────────────────────────────
+//
+// Latest wins. While one request is running, newer parameters replace any
+// queued ones, so dragging never builds a backlog. A job with a commit label
+// adds a line to the history when its result arrives.
+
+let evaluateBusy = false;
+let evaluateNext = null;
+
+function requestEvaluate(options = {}) {
+  const pending = evaluateNext;
+  evaluateNext = {
+    params: params(),
+    ankle: state.ankle,
+    refs: Boolean(options.refs) || Boolean(pending && pending.refs),
+    commit: options.commit || null,
+  };
+  if (!evaluateBusy) runEvaluate();
+}
+
+async function runEvaluate() {
+  evaluateBusy = true;
+  while (evaluateNext) {
+    const job = evaluateNext;
+    evaluateNext = null;
+    setStatus("Computing…", "busy");
+    try {
+      const data = await backend.evaluate(job);
+      state.result = data.result;
+      state.scene = data.scene;
+      if (data.references) {
+        state.references = data.references;
+        state.referencesFor = referencesKey(job.params.pos, job.params.h);
+      }
+      if (job.commit) commitHistory(job.commit, data.result, job.params);
+      clearError();
+      render();
+      if (job.refs || backend.name === "static") requestLine();
+      setStatus((backend.name === "live" ? "Updated in " : "Interpolated in ") + Math.max(1, Math.round(data.elapsed_ms)) + " ms", "ok");
+    } catch (error) {
+      showError(error);
+    }
+  }
+  evaluateBusy = false;
+}
+
+// The insertion line takes about half a second on the live engine, so it is
+// only refreshed when a drag is released. Latest wins, as for the results.
+let lineBusy = false;
+let lineWanted = false;
+
+async function requestLine() {
+  lineWanted = true;
+  if (lineBusy) return;
+  lineBusy = true;
+  try {
+    while (lineWanted) {
+      lineWanted = false;
+      const p = params();
+      const key = lineKey(p);
+      if (state.line && state.lineFor === key) continue;
+      const data = await backend.line(p);
+      state.line = data;
+      state.lineFor = key;
+      renderLine();
+      renderCards();
+      updateBestMarker();
+    }
+  } catch (error) {
+    showError(error);
+  } finally {
+    lineBusy = false;
+  }
+}
+
+let sceneBusy = false;
+let sceneWanted = false;
+
+async function requestScene() {
+  sceneWanted = true;
+  if (sceneBusy) return;
+  sceneBusy = true;
+  try {
+    while (sceneWanted) {
+      sceneWanted = false;
+      state.scene = await backend.scene(params(), state.ankle);
+      updateScene();
+    }
+  } catch (error) {
+    showError(error);
+  } finally {
+    sceneBusy = false;
+  }
+}
+
+// ── history of lines ────────────────────────────────────────────────
+
+function commitHistory(label, result, p) {
+  const last = history.entries[history.entries.length - 1];
+  if (last && sameParams(last.params, p)) {
+    last.result = result;
+    history.activeId = last.id;
+    return;
+  }
+  const entry = { id: history.nextId++, label, params: Object.assign({}, p), result };
+  history.entries.push(entry);
+  while (history.entries.length > HISTORY_LIMIT) history.entries.shift();
+  history.activeId = entry.id;
+}
+
+function restoreHistory(id) {
+  const entry = history.entries.find((item) => item.id === id);
+  if (!entry) return;
+  state.z = entry.params.z;
+  state.h = entry.params.h;
+  state.p3 = entry.params.p3;
+  state.pos = entry.params.pos;
+  state.result = entry.result;
+  history.activeId = id;
+  renderControls();
+  render();
+  requestEvaluate({ refs: true });
+}
+
+function clearHistory() {
+  history.entries = [];
+  if (state.result) commitHistory("Kept when history was cleared", state.result, params());
+  render();
+}
+
+function setHover(id) {
+  if (history.hoverId === id) return;
+  history.hoverId = id;
+  document.querySelectorAll(".hist, #history li").forEach((element) => {
+    element.classList.toggle("hl", Number(element.dataset.id) === id);
+  });
+}
+
+function renderHistory() {
+  const list = $("history");
+  list.innerHTML = [...history.entries].reverse().map((entry) => {
+    const p = entry.params;
+    const detail = "route " + signed(p.z, 1) + " mm · window " + num(p.h, 1) + " cm · retinaculum " +
+      signed(effectiveP3(p), 1) + " mm" + (p.p3 === null ? " (follows)" : "") + " · insertion " + num(p.pos, 2);
+    const classes = [entry.id === history.activeId ? "active" : "", entry.id === history.hoverId ? "hl" : ""].join(" ");
+    return '<li data-id="' + entry.id + '" class="' + classes + '"><span class="num">' + entry.id + "</span>" +
+      '<span class="text"><b>' + esc(entry.label) + "</b><small>" + esc(detail) + "</small></span></li>";
+  }).join("");
+}
+
+// ── controls ────────────────────────────────────────────────────────
+
+function tickMarks(element, range, marks) {
+  element.innerHTML = marks.map(([label, value]) => {
+    const position = (value - range[0]) / (range[1] - range[0]) * 100;
+    return '<span class="tick" style="left:' + position + '%"><i></i>' + label + "</span>";
+  }).join("");
+}
+
+function windowLabel() {
+  return "Window moved to " + signed(state.z, 1) + " mm, " + num(state.h, 1) + " cm";
+}
+function retinaculumLabel() {
+  return state.p3 === null ? "Retinaculum point follows the route" : "Retinaculum point moved to " + signed(state.p3, 1) + " mm";
+}
+function insertionLabel() {
+  return "Insertion " + num(state.pos, 2) + ", " + describePosition(state.pos);
+}
+
+function buildControls() {
+  const config = state.config;
+
+  const route = $("z");
+  route.min = config.route_range_mm[0];
+  route.max = config.route_range_mm[1];
+  route.step = 0.5;
+  tickMarks($("zTicks"), config.route_range_mm, [["IO", config.presets.IO.z_mm], ["CT", config.presets.CT.z_mm]]);
+
+  const retinaculum = $("p3");
+  retinaculum.min = config.retinaculum_range_mm[0];
+  retinaculum.max = config.retinaculum_range_mm[1];
+  retinaculum.step = 0.5;
+  tickMarks($("pTicks"), config.retinaculum_range_mm, [["IO", config.presets.IO.p3_mm], ["CT", config.presets.CT.p3_mm]]);
+
+  const height = $("h");
+  height.min = config.height_range_cm[0];
+  height.max = config.height_range_cm[1];
+  height.step = 0.05;
+  $("hMin").textContent = config.height_range_cm[0] + " cm";
+  $("hMax").textContent = config.height_range_cm[1] + " cm";
+
+  // the 7 to 10 cm target band painted onto the height track
+  const span = config.height_range_cm[1] - config.height_range_cm[0];
+  const bandStart = (config.target_band_cm[0] - config.height_range_cm[0]) / span * 100;
+  const bandEnd = (config.target_band_cm[1] - config.height_range_cm[0]) / span * 100;
+  height.style.setProperty("--track",
+    "linear-gradient(to right, #2A303C " + bandStart + "%, #4D3F1A " + bandStart + "%, #4D3F1A " +
+    bandEnd + "%, #2A303C " + bandEnd + "%)");
+
+  const slider = $("pos");
+  slider.min = config.line.range[0];
+  slider.max = config.line.range[1];
+  slider.step = 0.025;  // lands exactly on every 0.125 grid position
+  tickMarks($("posTicks"), config.line.range,
+    config.insertions.map((item, index) => [SHORT_ANCHOR[index] || String(index + 1), item.position]));
+  slider.addEventListener("input", () => {
+    state.pos = Number(slider.value);
+    renderControls();
+    renderLine();
+    requestEvaluate();
+  });
+  slider.addEventListener("change", () => requestEvaluate({ refs: true, commit: insertionLabel() }));
+  $("goBest").addEventListener("click", () => {
+    if (!lineFresh() || !state.line.best) return;
+    state.pos = state.line.best.position;
+    renderControls();
+    renderLine();
+    requestEvaluate({ refs: true, commit: "Best insertion for this route" });
+  });
+  wireLineChart($("lineChart"));
+
+  route.addEventListener("input", () => { state.z = Number(route.value); renderControls(); requestEvaluate(); });
+  route.addEventListener("change", () => requestEvaluate({ refs: true, commit: windowLabel() }));
+  retinaculum.addEventListener("input", () => { state.p3 = Number(retinaculum.value); renderControls(); requestEvaluate(); });
+  retinaculum.addEventListener("change", () => requestEvaluate({ refs: true, commit: retinaculumLabel() }));
+  height.addEventListener("input", () => { state.h = Number(height.value); renderControls(); requestEvaluate(); });
+  height.addEventListener("change", () => requestEvaluate({ refs: true, commit: "Window height " + num(state.h, 1) + " cm" }));
+
+  $("pFollow").addEventListener("click", () => {
+    if (state.p3 === null) return;
+    state.p3 = null;
+    renderControls();
+    requestEvaluate({ refs: true, commit: retinaculumLabel() });
+  });
+
+  // every palsy curve comes back in one response, so switching needs no new request
+  document.querySelectorAll("#palsy button").forEach((button) => {
+    button.addEventListener("click", () => { state.palsy = button.dataset.level; renderControls(); render(); });
+  });
+
+  document.querySelectorAll(".presets button").forEach((button) => {
+    button.addEventListener("click", () => {
+      const tag = button.dataset.preset;
+      const preset = config.presets[tag];
+      state.z = preset.z_mm;
+      state.h = preset.height_cm;
+      state.p3 = null;
+      renderControls();
+      requestEvaluate({ refs: true, commit: "Published " + (tag === "IO" ? "interosseous" : "circumtibial") + " route" });
+    });
+  });
+
+  $("ankle").addEventListener("input", () => setAnkle(Number($("ankle").value)));
+  $("gait").addEventListener("input", () => { stopGaitPlay(); setGaitPct(Number($("gait").value)); });
+  $("gaitPlay").addEventListener("click", toggleGaitPlay);
+  const spark = $("gaitSpark");
+  let sparkDragging = false;
+  const sparkPct = (event) => {
+    const rect = spark.getBoundingClientRect();
+    return clamp((event.clientX - rect.left - GAIT_INSET) / (rect.width - GAIT_INSET * 2) * 100, 0, 100);
+  };
+  spark.addEventListener("pointerdown", (event) => {
+    sparkDragging = true;
+    try { spark.setPointerCapture(event.pointerId); } catch (error) { /* ignore */ }
+    stopGaitPlay();
+    setGaitPct(sparkPct(event));
+  });
+  spark.addEventListener("pointermove", (event) => { if (sparkDragging) setGaitPct(sparkPct(event)); });
+  spark.addEventListener("pointerup", () => { sparkDragging = false; });
+  spark.addEventListener("pointercancel", () => { sparkDragging = false; });
+  $("resetView").addEventListener("click", () => { if (three.ready) { frameView(); updateCamera(); requestRender(); } });
+
+  $("refToggle").addEventListener("click", () => {
+    state.showReferences = !state.showReferences;
+    $("refToggle").setAttribute("aria-pressed", String(state.showReferences));
+    renderCharts();
+  });
+  $("clearHistory").addEventListener("click", clearHistory);
+  $("vectorToggle").addEventListener("click", () => {
+    state.showVectors = !state.showVectors;
+    $("vectorToggle").setAttribute("aria-pressed", String(state.showVectors));
+    $("vectorLegend").hidden = !state.showVectors;
+    updateScene();
+  });
+  document.querySelectorAll("#arrowMode button").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.arrowMode = button.dataset.mode;
+      renderControls();
+      renderVectorLegend();
+      if (three.ready) { updateVectors(); requestRender(); }
+    });
+  });
+  document.querySelectorAll("#compMode button").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.compMode = button.dataset.mode;
+      renderControls();
+      renderVectorLegend();
+      renderCharts();
+      if (three.ready) { updateVectors(); requestRender(); }
+    });
+  });
+
+  const list = $("history");
+  list.addEventListener("click", (event) => {
+    const item = event.target.closest("li");
+    if (item) restoreHistory(Number(item.dataset.id));
+  });
+  list.addEventListener("pointerover", (event) => {
+    const item = event.target.closest("li");
+    setHover(item ? Number(item.dataset.id) : null);
+  });
+  list.addEventListener("pointerleave", () => setHover(null));
+
+  for (const id of ["chartDorsi", "chartSide", "chartComp", "chartNet"]) wireChart($(id));
+
+  $("exportCharts").addEventListener("click", () => exportCharts().catch(showError));
+  $("exportView").addEventListener("click", exportView);
+  $("exportCsv").addEventListener("click", exportCsv);
+}
+
+function renderControls() {
+  const config = state.config;
+  $("z").value = state.z;
+  $("zValue").textContent = signed(state.z, 1) + " mm";
+
+  const p3 = effectiveP3(params());
+  $("p3").value = p3;
+  $("pValue").textContent = signed(p3, 1) + " mm";
+  const follow = $("pFollow");
+  follow.classList.toggle("active", state.p3 === null);
+  follow.textContent = state.p3 === null ? "Follows route" : "Follow route";
+
+  $("h").value = state.h;
+  const hValue = $("hValue");
+  hValue.textContent = num(state.h, 1) + " cm";
+  hValue.classList.toggle("warn", state.h < config.target_band_cm[0] || state.h > 12);
+  const percent = state.h / config.tibia_length_cm * 100;
+  $("hDetail").textContent = "Above the medial malleolus tip, " + num(percent, 0) + "% of tibia length.";
+
+  $("pos").value = state.pos;
+  $("posValue").textContent = num(state.pos, 2);
+  $("insertionName").textContent = describePosition(state.pos);
+  const anchor = exactAnchor(state.pos);
+  $("insertionNote").innerHTML = anchor
+    ? '<span class="badge" style="--kind:' + KIND[anchor.kind].colour + '">' + esc(KIND[anchor.kind].label) + "</span>" + esc(anchor.note)
+    : "On the straight line between the two sites either side.";
+  document.querySelectorAll("#compMode button").forEach((button) => button.classList.toggle("active", button.dataset.mode === state.compMode));
+  document.querySelectorAll("#arrowMode button").forEach((button) => button.classList.toggle("active", button.dataset.mode === state.arrowMode));
+
+  document.querySelectorAll("#palsy button").forEach((button) => button.classList.toggle("active", button.dataset.level === state.palsy));
+}
+
+function setAnkle(angle, fromGait) {
+  angle = clamp(Math.round(angle * 10) / 10, -20, 20);
+  if (!fromGait && state.gait) {
+    // an angle picked on the plots is not tied to a moment in the stride
+    stopGaitPlay();
+    state.gaitPct = null;
+  }
+  if (angle !== state.ankle) {
+    state.ankle = angle;
+    $("ankle").value = angle;
+    $("ankleValue").textContent = signed(angle, 0) + "°";
+    requestScene();
+    renderCharts();
+  }
+  if (!fromGait) renderGait();
+}
+
+// ── insertion line ──────────────────────────────────────────────────
+//
+// The dorsiflexion lever at 14 degrees along the whole insertion line, for
+// the route, window and retinaculum point now set. Its x axis lines up with
+// the slider underneath, so the peak sits right above the best position.
+
+const LINE_INSET = 9;  // the same inset as the slider ticks
+
+// Splits a curve into runs of one sign, cutting each run where the sign flips.
+// ys is what is drawn, signs decides the colour.
+function signedRuns(xs, ys, signs) {
+  const runs = [];
+  let run = null;
+  for (let i = 0; i < xs.length; i++) {
+    if (!Number.isFinite(ys[i]) || !Number.isFinite(signs[i])) {
+      run = null;
+      continue;
+    }
+    const sign = signs[i] >= 0 ? 1 : -1;
+    if (run && run.sign !== sign) {
+      const t = signs[i - 1] / (signs[i - 1] - signs[i]);
+      const cut = [xs[i - 1] + t * (xs[i] - xs[i - 1]), ys[i - 1] + t * (ys[i] - ys[i - 1])];
+      run.points.push(cut);
+      run = { sign, points: [cut] };
+      runs.push(run);
+    } else if (!run) {
+      run = { sign, points: [] };
+      runs.push(run);
+    }
+    run.points.push([xs[i], ys[i]]);
+  }
+  return runs;
+}
+
+// text that would run past the frame is squeezed to fit, never cut off
+function fitAttr(text, size, room) {
+  const guess = String(text).length * size * 0.56;
+  return guess > room ? ' textLength="' + Math.max(10, Math.floor(room)) + '" lengthAdjust="spacingAndGlyphs"' : "";
+}
+
+function renderLine() {
+  const element = $("lineChart");
+  const width = Math.round(element.clientWidth);
+  if (!width || !state.config) return;
+  const height = 128;
+  const top = 32;
+  const bottom = height - 4;
+  const range = state.config.line.range;
+  const px = (position) => LINE_INSET + (position - range[0]) / (range[1] - range[0]) * (width - LINE_INSET * 2);
+  const font = 'font-family="Segoe UI, system-ui, sans-serif"';
+  const fresh = lineFresh();
+  const line = state.line;
+
+  let svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height + '" viewBox="0 0 ' + width + " " + height + '">';
+  const title = "Dorsiflexion lever at 14°, mm";
+  const subtitle = "along the insertion line, for this route · ◇ best";
+  svg += '<text x="0" y="11" ' + font + ' font-size="11" font-weight="600" fill="#E6E8EE"' + fitAttr(title, 11, width) + ">" + title + "</text>";
+  svg += '<text x="0" y="24" ' + font + ' font-size="9.5" fill="#9AA3B2"' + fitAttr(subtitle, 9.5, width) + ">" + subtitle + "</text>";
+  if (!line) {
+    svg += '<text x="' + width / 2 + '" y="' + (top + 40) + '" ' + font + ' font-size="10.5" fill="#9AA3B2" text-anchor="middle">Loading…</text></svg>';
+    element.innerHTML = svg;
+    $("bestNote").textContent = "Finding the best insertion…";
+    return;
+  }
+
+  const xs = line.positions;
+  const dorsi = line.dorsi_arm_14;
+  const side = line.sup_arm_14;
+  const values = dorsi.concat(side).filter(Number.isFinite);
+  const ticks = niceTicks(Math.min(0, ...values), Math.max(...values), 3);
+  const low = ticks[0];
+  const high = ticks[ticks.length - 1];
+  const py = (value) => top + (high - value) / (high - low) * (bottom - top);
+  const points = (ys) => xs.map((x, i) => px(x).toFixed(1) + "," + py(ys[i]).toFixed(1)).join(" ");
+
+  svg += '<g opacity="' + (fresh ? 1 : 0.4) + '">';
+  // navicular to medial cuneiform only compares, as in V2 Part 1
+  const selection = state.config.line.selection_range;
+  svg += '<rect x="' + px(range[0]) + '" y="' + top + '" width="' + (px(selection[0]) - px(range[0])) + '" height="' + (bottom - top) +
+    '" fill="#8B949E" fill-opacity="0.08"/>';
+  for (const anchor of state.config.insertions) {
+    svg += '<line x1="' + px(anchor.position) + '" y1="' + top + '" x2="' + px(anchor.position) + '" y2="' + bottom + '" stroke="#1E232C"/>';
+  }
+  // gridlines only, the numbers that matter are written under the chart
+  for (const tick of ticks) {
+    const y = py(tick);
+    svg += '<line x1="' + px(range[0]) + '" y1="' + y + '" x2="' + px(range[1]) + '" y2="' + y + '" stroke="' + (tick === 0 ? "#6E7681" : "#262C36") + '"/>';
+  }
+
+  // the supination or pronation lever, thin, coloured by direction
+  for (const run of signedRuns(xs, side, side)) {
+    const colour = run.sign > 0 ? SIDE_COLOURS.supination : SIDE_COLOURS.pronation;
+    svg += '<polyline points="' + run.points.map((p) => px(p[0]).toFixed(1) + "," + py(p[1]).toFixed(1)).join(" ") +
+      '" fill="none" stroke="' + colour + '" stroke-width="1.6" stroke-linejoin="round"/>';
+    if (run.points.length >= 6) {
+      const middle = run.points[Math.floor(run.points.length / 2)];
+      const words = run.sign > 0 ? "Supination lever" : "Pronation lever";
+      const half = words.length * 9.5 * 0.58 / 2;
+      const wx = clamp(px(middle[0]), half + 1, width - half - 1);
+      svg += '<text x="' + wx.toFixed(1) + '" y="' + clamp(py(middle[1]) + (run.sign > 0 ? -5 : 12), top + 9, bottom - 2).toFixed(1) + '" ' + font +
+        ' font-size="9.5" font-weight="600" fill="' + colour + '" text-anchor="middle" stroke="#161B22" stroke-width="3" paint-order="stroke">' +
+        words + "</text>";
+    }
+  }
+  // the dorsiflexion lever, the one the best insertion is chosen by
+  svg += '<polyline points="' + points(dorsi) + '" fill="none" stroke="#A78BFA" stroke-width="2.2" stroke-linejoin="round"/>';
+  // written under its own line on the medial cuneiform stretch, clear of the best marker above the peak
+  const labelAt = 1.5;
+  svg += '<text x="' + px(labelAt).toFixed(1) + '" y="' + clamp(py(valueAtAngle(xs, dorsi, labelAt)) + 13, top + 9, bottom - 2).toFixed(1) + '" ' + font +
+    ' font-size="9.5" font-weight="600" fill="#C4B5FD" text-anchor="middle" stroke="#161B22" stroke-width="3" paint-order="stroke">Dorsiflexion lever</text>';
+
+  svg += "</g>";
+
+  const x = px(state.pos);
+  svg += '<line x1="' + x + '" y1="' + top + '" x2="' + x + '" y2="' + bottom + '" stroke="#FFD166" stroke-opacity="0.6" stroke-dasharray="3 3"/>';
+  const here = valueAtAngle(xs, dorsi, state.pos);
+  if (fresh && Number.isFinite(here)) {
+    svg += '<circle cx="' + x + '" cy="' + py(here) + '" r="3" fill="#A78BFA" stroke="#161B22" stroke-width="1.2"/>';
+  }
+  if (line.best) {
+    // a gold diamond with a hollow centre, so the purple dot still shows when they coincide
+    const bx = px(line.best.position);
+    const by = py(line.best.dorsi_arm_14_mm);
+    svg += '<path d="M' + bx + "," + (by - 6.5) + " L" + (bx + 6.5) + "," + by + " L" + bx + "," + (by + 6.5) + " L" + (bx - 6.5) + "," + by +
+      ' Z" fill="none" stroke="' + BEST_COLOUR + '" stroke-width="2" opacity="' + (fresh ? 1 : 0.4) + '"/>';
+    const tag = "best";
+    const tx = clamp(bx, 12, width - 12);
+    svg += '<text x="' + tx + '" y="' + Math.max(top + 8, by - 9) + '" ' + font + ' font-size="9.5" font-weight="700" fill="' + BEST_COLOUR +
+      '" text-anchor="middle" stroke="#161B22" stroke-width="3" paint-order="stroke">' + tag + "</text>";
+  }
+  if (!fresh) {
+    svg += '<text x="' + width / 2 + '" y="' + (bottom - 6) + '" ' + font + ' font-size="10" fill="#E6E8EE" text-anchor="middle">updating…</text>';
+  }
+  svg += "</svg>";
+  element.innerHTML = svg;
+
+  const best = fresh ? line.best : null;
+  $("goBest").disabled = !best || Math.abs(best.position - state.pos) < 1e-9;
+  $("bestNote").textContent = best
+    ? "Best " + num(best.position, 2) + ", " + num(best.dorsi_arm_14_mm, 1) + " mm · here " + num(here, 1) + " mm"
+    : "Finding the best insertion…";
+}
+
+function wireLineChart(element) {
+  let dragging = false;
+  const positionAt = (event) => {
+    const rect = element.getBoundingClientRect();
+    const range = state.config.line.range;
+    const raw = range[0] + (event.clientX - rect.left - LINE_INSET) / (rect.width - LINE_INSET * 2) * (range[1] - range[0]);
+    return Math.round(clamp(raw, range[0], range[1]) * 40) / 40;
+  };
+  const move = (event) => {
+    const position = positionAt(event);
+    if (position === state.pos) return;
+    state.pos = position;
+    renderControls();
+    renderLine();
+    requestEvaluate();
+  };
+  element.addEventListener("pointerdown", (event) => {
+    dragging = true;
+    try { element.setPointerCapture(event.pointerId); } catch (error) { /* ignore */ }
+    move(event);
+  });
+  element.addEventListener("pointermove", (event) => { if (dragging) move(event); });
+  const stop = () => {
+    if (!dragging) return;
+    dragging = false;
+    requestEvaluate({ refs: true, commit: insertionLabel() });
+  };
+  element.addEventListener("pointerup", stop);
+  element.addEventListener("pointercancel", stop);
+}
+
+// ── numbers ─────────────────────────────────────────────────────────
+
+// ── gait cycle ──────────────────────────────────────────────────────
+//
+// The ankle angle the model is shown at follows one real stride: the left
+// leg of OpenSim's example walking trial, heel strike to heel strike, the
+// same curve as gait_cycle_ankle.ipynb. Angles picked on the plots unlink it.
+
+const GAIT_INSET = 9;       // the range thumb's centre stops 9 px short of each end
+const GAIT_SECONDS = 4;     // one stride lasts about 1.2 s in the trial, played slower
+
+function gaitAngleAt(pct) {
+  return valueAtAngle(state.gait.percent, state.gait.ankle_deg, pct);
+}
+
+function phaseAt(pct) {
+  for (const phase of state.gait.phases) {
+    if (pct < phase.end) return phase.name;
+  }
+  return state.gait.phases[state.gait.phases.length - 1].name;
+}
+
+function setGaitPct(pct) {
+  state.gaitPct = clamp(pct, 0, 100);
+  $("gait").value = state.gaitPct;
+  setAnkle(gaitAngleAt(state.gaitPct), true);
+  renderGait();
+}
+
+function buildGaitPhases() {
+  $("gaitPhases").innerHTML = state.gait.phases.map((phase) =>
+    '<span class="gait-phase" title="' + esc(phase.name) + " " + phase.start + " to " + phase.end + '%" style="left:calc(' +
+    GAIT_INSET + "px + (100% - " + GAIT_INSET * 2 + "px) * " + phase.start / 100 + ");width:calc((100% - " +
+    GAIT_INSET * 2 + "px) * " + (phase.end - phase.start) / 100 + ')">' + esc(phase.name.replace(" response", "")) + "</span>").join("");
+}
+
+function renderGait() {
+  if (!state.gait) return;
+  const linked = state.gaitPct !== null;
+  $("gaitPct").textContent = linked ? num(state.gaitPct, 0) + "%" : "—";
+  const phase = $("gaitPhase");
+  phase.textContent = linked ? phaseAt(state.gaitPct) : "angle picked on the plots";
+  phase.classList.toggle("custom", !linked);
+  $("gaitAnkle").textContent = signed(state.ankle, 1) + "°";
+  renderGaitSpark();
+}
+
+function renderGaitSpark() {
+  const element = $("gaitSpark");
+  const gait = state.gait;
+  if (!gait || !element.clientWidth) return;
+  const width = Math.round(element.clientWidth);
+  const height = 52;
+  const low = Math.floor(Math.min(...gait.ankle_deg) - 3);
+  const high = Math.ceil(Math.max(...gait.ankle_deg) + 3);
+  const px = (pct) => GAIT_INSET + pct / 100 * (width - GAIT_INSET * 2);
+  const py = (deg) => 4 + (high - deg) / (high - low) * (height - 8);
+  const font = 'font-family="Segoe UI, system-ui, sans-serif" font-size="9.5" fill="#9AA3B2"';
+  const swing = gait.phases[gait.phases.length - 1];
+
+  let svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height + '">';
+  svg += '<rect x="' + px(swing.start) + '" y="0" width="' + (px(100) - px(swing.start)) + '" height="' + height +
+    '" fill="#58A6FF" fill-opacity="0.07"/>';
+  svg += '<line x1="' + px(0) + '" y1="' + py(0) + '" x2="' + px(100) + '" y2="' + py(0) + '" stroke="#2A303C"/>';
+  svg += '<line x1="' + px(gait.toe_off_pct) + '" y1="2" x2="' + px(gait.toe_off_pct) + '" y2="' + (height - 2) +
+    '" stroke="#9AA3B2" stroke-dasharray="3 3"/>';
+  svg += '<text x="' + (px(gait.toe_off_pct) + 4) + '" y="11" ' + font + ">toe off " + num(gait.toe_off_pct, 0) + "%</text>";
+  svg += '<text x="' + (px(0) + 2) + '" y="11" ' + font + ">dorsiflexion +</text>";
+  svg += '<text x="' + (px(0) + 2) + '" y="' + (height - 3) + '" ' + font + ">plantarflexion −</text>";
+  const points = gait.percent.map((pct, i) => px(pct).toFixed(1) + "," + py(gait.ankle_deg[i]).toFixed(1)).join(" ");
+  svg += '<polyline points="' + points + '" fill="none" stroke="#C4B5FD" stroke-width="1.8" stroke-linejoin="round"/>';
+  if (state.gaitPct !== null) {
+    const x = px(state.gaitPct);
+    svg += '<line x1="' + x + '" y1="2" x2="' + x + '" y2="' + (height - 2) + '" stroke="#A78BFA" stroke-opacity="0.55"/>';
+    svg += '<circle cx="' + x + '" cy="' + py(state.ankle) + '" r="4" fill="#A78BFA" stroke="#0D1117" stroke-width="1.5"/>';
+  }
+  svg += "</svg>";
+  element.innerHTML = svg;
+}
+
+function toggleGaitPlay() {
+  state.gaitPlaying = !state.gaitPlaying;
+  $("gaitPlay").textContent = state.gaitPlaying ? "❚❚ Pause" : "▶ Play";
+  $("gaitPlay").setAttribute("aria-pressed", String(state.gaitPlaying));
+  if (!state.gaitPlaying) return;
+  if (state.gaitPct === null) state.gaitPct = 0;
+  let last = performance.now();
+  const step = (now) => {
+    if (!state.gaitPlaying) return;
+    const pct = (state.gaitPct + (now - last) / (GAIT_SECONDS * 1000) * 100) % 100;
+    last = now;
+    setGaitPct(pct);
+    requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+function stopGaitPlay() {
+  if (state.gaitPlaying) toggleGaitPlay();
+}
+
+function summary(result) {
+  if (!result) return null;
+  const neutral = result.angles.indexOf(0);
+  const at = result.angles.indexOf(CHECK_ANGLE);
+  const force = result.force ? result.force[at] : NaN;
+  return {
+    dfNeutral: result.dorsi_moment[neutral],
+    df14: result.dorsi_moment[at],
+    hind14: result.hindfoot_moment[at],
+    net14: result.net_hindfoot[state.palsy][at],
+    force14: force,
+    arm14: result.dorsi_moment[at] / force * 1000,
+    sideArm14: result.hindfoot_moment[at] / force * 1000,
+    toDf: result.neutral.dorsiflexion_pct,
+    wasted: result.neutral.wasted_pct,
+    bendWindow: result.bend.window_deg,
+    bendRetinaculum: result.bend.retinaculum_deg,
+    excursion: result.zajac_excursion,
+    norm: result.neutral.norm_mm,
+    slack: result.tendon_slack_mm,
+    p3: result.input.lower_z_mm,
+  };
+}
+
+function referencesFresh() {
+  return state.references && state.referencesFor === referencesKey(state.pos, state.h);
+}
+
+function render() {
+  renderVerdict();
+  renderCards();
+  renderCompare();
+  renderWarnings();
+  renderCharts();
+  renderLine();
+  renderHistory();
+  updateScene();
+}
+
+function renderVerdict() {
+  const s = summary(state.result);
+  if (!s) return;
+  const element = $("verdict");
+  const supinates = s.hind14 > 0;
+  element.className = "verdict " + (supinates ? "bad" : "good");
+  element.querySelector(".verdict-main").textContent = supinates
+    ? "Drives the hindfoot into supination" : "Assists pronation";
+  element.querySelector(".verdict-value").textContent = "at 14° dorsiflexion, " + signed(s.hind14, 2) + " Nm";
+  element.querySelector(".verdict-sub").textContent = PALSY_LABEL[state.palsy] + ": net hindfoot " +
+    signed(s.net14, 1) + " Nm, " + (s.net14 > 0 ? "supination" : "pronation") + ".";
+}
+
+function renderCards() {
+  const s = summary(state.result);
+  if (!s) return;
+  $("cDf").textContent = num(s.dfNeutral) + " Nm";
+  $("cDfSub").textContent = num(s.df14) + " Nm at 14° dorsiflexion";
+  $("cArm").textContent = num(s.arm14) + " mm";
+  const best = lineFresh() ? state.line.best : null;
+  $("cArmSub").textContent = best
+    ? "best on this route " + num(best.dorsi_arm_14_mm) + " mm, at " + num(best.position, 2)
+    : "finding the best insertion…";
+  const side = $("cSide");
+  side.textContent = num(Math.abs(s.hind14)) + " Nm";
+  side.className = "v " + (s.hind14 > 0 ? "bad" : "good");
+  $("cSideSub").textContent = (s.hind14 > 0 ? "supination" : "pronation") + ", lever " + num(Math.abs(s.sideArm14)) + " mm";
+  $("cBend").textContent = num(s.bendWindow, 0) + "°";
+  $("cBendSub").textContent = "retinaculum " + num(s.bendRetinaculum, 0) + "°, 180° is straight";
+  const excursion = $("cExc");
+  excursion.textContent = num(s.excursion, 2);
+  excursion.className = "v " + (s.excursion >= 1 ? "good" : "bad");
+  $("cExcSub").textContent = "1.00 matches tibialis anterior";
+  const net = $("cNet");
+  net.textContent = signed(s.net14) + " Nm";
+  net.className = "v " + (s.net14 > 0 ? "bad" : "good");
+  $("cNetSub").textContent = PALSY_LABEL[state.palsy];
+}
+
+function renderCompare() {
+  const current = summary(state.result);
+  if (!current) return;
+  const fresh = referencesFresh();
+  const io = fresh ? summary(state.references.IO) : null;
+  const ct = fresh ? summary(state.references.CT) : null;
+
+  const rows = [
+    ["Retinaculum point mm", (s) => s.p3, (v) => signed(v), false],
+    ["DF moment, neutral", (s) => s.dfNeutral, (v) => num(v), false],
+    ["DF moment, 14° DF", (s) => s.df14, (v) => num(v), false],
+    ["DF lever, 14° DF mm", (s) => s.arm14, (v) => num(v), false],
+    ["Hindfoot, 14° DF", (s) => s.hind14, (v) => signed(v), true],
+    ["Net hindfoot, 14° DF", (s) => s.net14, (v) => signed(v), true],
+    ["Bend at window °", (s) => s.bendWindow, (v) => num(v, 0), false],
+    ["Bend at retinaculum °", (s) => s.bendRetinaculum, (v) => num(v, 0), false],
+    ["Zajac excursion", (s) => s.excursion, (v) => num(v, 2), false],
+  ];
+
+  const cell = (s, get, format, signColour, extra) => {
+    if (!s) return '<td class="stale">…</td>';
+    const value = get(s);
+    const sign = signColour ? (value > 0 ? " pos" : " neg") : "";
+    return '<td class="' + (extra || "") + sign + '">' + format(value) + "</td>";
+  };
+
+  $("compareBody").innerHTML = rows.map(([label, get, format, signColour]) =>
+    "<tr><td>" + label + "</td>" + cell(current, get, format, signColour, "cur") +
+    cell(io, get, format, signColour) + cell(ct, get, format, signColour) + "</tr>").join("");
+  $("compareNote").textContent = fresh
+    ? "IO and CT keep their published window and retinaculum point, with the same insertion, height and palsy. Moments in Nm, levers in mm. Above zero is supination."
+    : "Updating the IO and CT references…";
+}
+
+function renderWarnings() {
+  const list = (state.result && state.result.warnings) || [];
+  $("warnings").innerHTML = list.map((warning) => "<li>" + esc(warning) + "</li>").join("");
+}
+
+// ── live plots ──────────────────────────────────────────────────────
+//
+// As in OpenSim Creator's muscle plot. The bold line follows every drag.
+// Releasing a point keeps that line, and older lines fade. Clicking a faded
+// line puts the model back to that configuration. Clicking or dragging on
+// the plot sets the ankle angle the model is shown at.
+
+function niceTicks(low, high, count) {
+  const raw = (high - low) / (count - 1);
+  const magnitude = Math.pow(10, Math.floor(Math.log10(raw)));
+  const normalised = raw / magnitude;
+  const step = (normalised < 1.5 ? 1 : normalised < 3 ? 2 : normalised < 7 ? 5 : 10) * magnitude;
+  const ticks = [];
+  for (let v = Math.floor(low / step) * step; v <= Math.ceil(high / step) * step + step * 0.5; v += step) {
+    ticks.push(Number(v.toFixed(10)));
+  }
+  return ticks;
+}
+
+function lineChart(element, o) {
+  const width = Math.max(260, Math.round(element.clientWidth));
+  const height = 210;
+  const m = { left: 44, right: 12, top: 38, bottom: 32 };
+  const font = 'font-family="Segoe UI, system-ui, sans-serif"';
+  const series = o.series || [];
+
+  const values = [o.active || [], ...o.history.map((line) => line.ys), ...o.references.map((line) => line.ys), ...series.map((line) => line.ys)]
+    .flat().filter(Number.isFinite);
+  let low = values.length ? Math.min(...values) : -1;
+  let high = values.length ? Math.max(...values) : 1;
+  if (o.zero) { low = Math.min(low, 0); high = Math.max(high, 0); }
+  if (high - low < 1e-9) { low -= 1; high += 1; }
+  const ticks = niceTicks(low, high, 5);
+  low = ticks[0];
+  high = ticks[ticks.length - 1];
+
+  const xs = o.xs;
+  const x0 = xs[0];
+  const x1 = xs[xs.length - 1];
+  const plotW = width - m.left - m.right;
+  const plotH = height - m.top - m.bottom;
+  const px = (v) => m.left + (v - x0) / (x1 - x0) * plotW;
+  const py = (v) => m.top + (high - v) / (high - low) * plotH;
+  const points = (ys) => xs.map((x, i) => px(x).toFixed(1) + "," + py(ys[i]).toFixed(1)).join(" ");
+  const pairs = (list) => list.map((p) => px(p[0]).toFixed(1) + "," + py(p[1]).toFixed(1)).join(" ");
+
+  let svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height +
+    '" viewBox="0 0 ' + width + " " + height + '">';
+  svg += '<rect width="' + width + '" height="' + height + '" fill="#161B22"/>';
+  const title = o.title + " (" + o.unit + ")";
+  svg += '<text x="' + m.left + '" y="15" ' + font + ' font-size="12.5" font-weight="600" fill="#E6E8EE"' +
+    fitAttr(title, 12.5, width - m.left - 4) + ">" + esc(title) + "</text>";
+  svg += '<text x="' + m.left + '" y="29" ' + font + ' font-size="10.5" fill="#9AA3B2"' +
+    fitAttr(o.subtitle, 10.5, width - m.left - 4) + ">" + esc(o.subtitle) + "</text>";
+
+  for (const tick of ticks) {
+    const y = py(tick);
+    svg += '<line x1="' + m.left + '" y1="' + y + '" x2="' + (width - m.right) + '" y2="' + y + '" stroke="#262C36"/>';
+    const label = Number.isInteger(tick) ? tick.toFixed(0) : tick.toFixed(1);
+    svg += '<text x="' + (m.left - 6) + '" y="' + (y + 4) + '" ' + font +
+      ' font-size="10.5" fill="#9AA3B2" text-anchor="end">' + label.replace(/-/g, "−") + "</text>";
+  }
+  for (const tick of [-20, -10, 0, 10, 20]) {
+    const x = px(tick);
+    svg += '<line x1="' + x + '" y1="' + m.top + '" x2="' + x + '" y2="' + (height - m.bottom) + '" stroke="#1E232C"/>';
+    svg += '<text x="' + x + '" y="' + (height - m.bottom + 14) + '" ' + font +
+      ' font-size="10.5" fill="#9AA3B2" text-anchor="middle">' + String(tick).replace(/-/g, "−") + "</text>";
+  }
+  if (o.zero && low < 0 && high > 0) {
+    svg += '<line x1="' + m.left + '" y1="' + py(0) + '" x2="' + (width - m.right) + '" y2="' + py(0) + '" stroke="#E6E8EE" stroke-width="1"/>';
+  }
+
+  // transparent layer that takes clicks for the ankle angle, under the lines
+  svg += '<rect class="plot-bg" x="' + m.left + '" y="' + m.top + '" width="' + plotW + '" height="' + plotH +
+    '" fill="#FFFFFF" fill-opacity="0"/>';
+
+  const markerX = px(clamp(state.ankle, x0, x1));
+  svg += '<line x1="' + markerX + '" y1="' + m.top + '" x2="' + markerX + '" y2="' + (height - m.bottom) +
+    '" stroke="#A78BFA" stroke-opacity="0.4" stroke-dasharray="3 3" pointer-events="none"/>';
+
+  const labels = (o.labels || []).slice();
+  for (const line of o.references) {
+    svg += '<polyline points="' + points(line.ys) + '" fill="none" stroke="' + line.colour +
+      '" stroke-width="1.5" stroke-dasharray="6 4" stroke-opacity="0.85" pointer-events="none"/>';
+    if (line.label) {
+      labels.push({ x: x1, y: line.ys[line.ys.length - 1], text: line.label, colour: line.colour, anchor: "end", dy: -6, size: 10 });
+    }
+  }
+
+  // oldest first, so the newest faded line sits on top
+  for (const line of [...o.history].reverse()) {
+    svg += '<g class="hist" data-id="' + line.id + '"><title>' + esc(line.label) + "</title>";
+    svg += '<polyline class="hit" points="' + points(line.ys) + '" fill="none" stroke="#FFFFFF" stroke-opacity="0" stroke-width="12" pointer-events="stroke"/>';
+    svg += '<polyline class="vis" points="' + points(line.ys) + '" fill="none" stroke="#A78BFA" stroke-opacity="' +
+      line.opacity.toFixed(2) + '" stroke-width="1.5" stroke-linejoin="round" pointer-events="none"/></g>';
+  }
+
+  for (const line of series) {
+    svg += '<polyline points="' + points(line.ys) + '" fill="none" stroke="' + line.colour + '" stroke-width="' + (line.width || 2.2) +
+      '"' + (line.dash ? ' stroke-dasharray="' + line.dash + '"' : "") + ' stroke-linejoin="round" pointer-events="none"/>';
+  }
+
+  if (o.active && o.signs) {
+    // one colour per direction, cut exactly where the direction flips
+    for (const run of signedRuns(xs, o.active, o.signs)) {
+      const colour = run.sign > 0 ? SIDE_COLOURS.supination : SIDE_COLOURS.pronation;
+      svg += '<polyline points="' + pairs(run.points) + '" fill="none" stroke="' + colour +
+        '" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round" pointer-events="none"/>';
+    }
+  } else if (o.active) {
+    svg += '<polyline points="' + points(o.active) + '" fill="none" stroke="#A78BFA" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round" pointer-events="none"/>';
+  }
+
+  svg += chartLabels(labels, { px, py, m, width, height, font });
+
+  svg += '<g class="hover" visibility="hidden" pointer-events="none">' +
+    '<line class="hv-line" stroke="#E6E8EE" stroke-opacity="0.35"/>' +
+    '<circle class="hv-dot" r="3.5" fill="#A78BFA" stroke="#161B22" stroke-width="1.5"/>' +
+    '<rect class="hv-box" rx="4" height="18" fill="#E6E8EE" fill-opacity="0.9"/>' +
+    '<text class="hv-text" ' + font + ' font-size="10.5" fill="#0D1117"></text></g>';
+
+  svg += '<text x="' + (m.left + plotW / 2) + '" y="' + (height - 4) + '" ' + font +
+    ' font-size="10.5" fill="#9AA3B2" text-anchor="middle">Ankle angle (deg, + is dorsiflexion)</text>';
+  svg += "</svg>";
+  element.innerHTML = svg;
+  element._map = { m, width, height, plotW, plotH, x0, x1, xs, ys: o.active || null, px, py, unit: o.unit, hoverText: o.hoverText || null };
+
+  if (history.hoverId !== null) {
+    element.querySelectorAll('.hist[data-id="' + history.hoverId + '"]').forEach((g) => g.classList.add("hl"));
+  }
+}
+
+// Words written beside the lines. Labels that would overlap are pushed apart
+// vertically, and every label is kept inside the plot frame.
+function chartLabels(labels, frame) {
+  const placed = labels.filter((label) => Number.isFinite(label.x) && Number.isFinite(label.y)).map((label) => {
+    const size = label.size || 10.5;
+    const textWidth = label.text.length * size * 0.58;
+    let x = frame.px(label.x);
+    if (label.anchor === "end") x = clamp(x - 2, frame.m.left + textWidth + 2, frame.width - frame.m.right - 2);
+    else if (label.anchor === "middle") x = clamp(x, frame.m.left + textWidth / 2 + 2, frame.width - frame.m.right - textWidth / 2 - 2);
+    else x = clamp(x + 6, frame.m.left + 6, frame.width - frame.m.right - textWidth - 2);
+    return Object.assign({}, label, { size, px: x, pyv: frame.py(label.y) + (label.dy || -6) });
+  }).sort((a, b) => a.pyv - b.pyv);
+  const topLimit = frame.m.top + 10;
+  const bottomLimit = frame.height - frame.m.bottom - 3;
+  for (let i = 0; i < placed.length; i++) {
+    placed[i].pyv = clamp(placed[i].pyv, topLimit, bottomLimit);
+    if (i > 0 && placed[i].pyv - placed[i - 1].pyv < placed[i].size + 1.5) placed[i].pyv = placed[i - 1].pyv + placed[i].size + 1.5;
+  }
+  // anything pushed past the bottom slides back up as a block
+  const overflow = placed.length ? placed[placed.length - 1].pyv - bottomLimit : 0;
+  if (overflow > 0) placed.forEach((label) => { label.pyv = Math.max(topLimit, label.pyv - overflow); });
+  return placed.map((label) => '<text x="' + label.px.toFixed(1) + '" y="' + label.pyv.toFixed(1) + '" ' + frame.font +
+    ' font-size="' + label.size + '" font-weight="650" fill="' + label.colour + '" text-anchor="' + (label.anchor || "start") +
+    '" stroke="#161B22" stroke-width="3" paint-order="stroke" pointer-events="none">' + esc(label.text) + "</text>").join("");
+}
+
+function renderCharts() {
+  const result = state.result;
+  if (!result) return;
+  const references = state.showReferences && referencesFresh() ? state.references : null;
+  const newestFirst = [...history.entries].reverse();
+  const at = result.angles.indexOf(CHECK_ANGLE);
+  const last = result.angles.length - 1;
+
+  const lines = (pick, name) => ({
+    active: pick(result),
+    history: newestFirst.map((entry, rank) => ({
+      id: entry.id,
+      label: entry.id + ") " + entry.label,
+      ys: pick(entry.result),
+      opacity: Math.max(0.12, 0.6 * Math.pow(0.72, rank)),
+    })),
+    references: references ? ["IO", "CT"].map((tag) => ({
+      ys: pick(references[tag]), colour: COLOURS[tag], label: name ? name(tag, references[tag]) : tag,
+    })) : [],
+  });
+
+  lineChart($("chartDorsi"), Object.assign({
+    title: "Dorsiflexion moment", unit: "Nm", subtitle: "Higher lifts the foot better", xs: result.angles, zero: false,
+  }, lines((r) => r.dorsi_moment)));
+
+  // both directions on one scale: the size is drawn, colour and words give the direction
+  const sideWord = (value) => (value > 0 ? "supination" : "pronation");
+  const side = Object.assign({
+    title: "Supination or pronation, size", unit: "Nm", subtitle: "Both on one scale · red supination, green pronation",
+    xs: result.angles, zero: true, signs: result.hindfoot_moment,
+    hoverText: (i) => signed(result.angles[i], 0) + "° · " + num(Math.abs(result.hindfoot_moment[i]), 1) + " Nm " + sideWord(result.hindfoot_moment[i]),
+  }, lines((r) => r.hindfoot_moment.map(Math.abs), (tag, r) => tag + ", " + sideWord(r.hindfoot_moment[at])));
+  side.labels = signedRuns(result.angles, side.active, result.hindfoot_moment)
+    .filter((run) => run.points.length >= 3)
+    .map((run) => {
+      const middle = run.points[Math.floor(run.points.length / 2)];
+      return {
+        x: middle[0], y: middle[1], text: run.sign > 0 ? "Supination" : "Pronation",
+        colour: run.sign > 0 ? SIDE_COLOURS.supination : SIDE_COLOURS.pronation, anchor: "middle", dy: -8,
+      };
+    });
+  lineChart($("chartSide"), side);
+
+  // the same moment split into the three directions a clinician names
+  const both = state.compMode === "both";
+  const parts = anatomicalParts(result, state.compMode);
+  const series = parts.map((ys, k) => ({ ys, colour: PART_COLOURS[k], width: 2.2 }));
+  const labels = parts.map((ys, k) => ({
+    x: result.angles[0], y: ys[0], text: ys[0] >= 0 ? PART_WORDS[k][0] : PART_WORDS[k][1], colour: PART_COLOURS[k], anchor: "start", dy: -6,
+  }));
+  if (!both) {
+    series.unshift({ ys: result.hindfoot_moment, colour: "#E6E8EE", width: 1.6, dash: "6 4" });
+    labels.push({
+      x: result.angles[last], y: result.hindfoot_moment[last],
+      text: (result.hindfoot_moment[last] > 0 ? "Supination" : "Pronation") + ", whole", colour: "#E6E8EE", anchor: "end", dy: -6,
+    });
+  }
+  lineChart($("chartComp"), {
+    title: both ? "Parts of ankle + subtalar" : "Parts of the subtalar moment", unit: "Nm",
+    subtitle: "Above zero: inversion, adduction, dorsiflexion", xs: result.angles, zero: true,
+    active: null, history: [], references: [], series, labels,
+    hoverText: (i) => signed(result.angles[i], 0) + "° · " + parts.map((ys, k) => PART_SHORT[k] + " " + signed(ys[i], 1)).join(" · "),
+  });
+
+  lineChart($("chartNet"), Object.assign({
+    title: "Net hindfoot moment", unit: "Nm", subtitle: PALSY_LABEL[state.palsy] + " · above zero is supination",
+    xs: result.angles, zero: true,
+  }, lines((r) => r.net_hindfoot[state.palsy])));
+}
+
+function chartX(element, event) {
+  const map = element._map;
+  const svg = element.querySelector("svg");
+  if (!map || !svg) return null;
+  const rect = svg.getBoundingClientRect();
+  const x = (event.clientX - rect.left) * map.width / rect.width;
+  const y = (event.clientY - rect.top) * map.height / rect.height;
+  return { x, y, value: map.x0 + (x - map.m.left) / map.plotW * (map.x1 - map.x0) };
+}
+
+function showHover(element, event) {
+  const map = element._map;
+  const at = chartX(element, event);
+  const group = element.querySelector(".hover");
+  if (!at || !group) return;
+  const inside = at.x >= map.m.left && at.x <= map.width - map.m.right && at.y >= map.m.top && at.y <= map.height - map.m.bottom;
+  if (!inside) { group.setAttribute("visibility", "hidden"); return; }
+
+  let index = 0;
+  map.xs.forEach((x, i) => { if (Math.abs(x - at.value) < Math.abs(map.xs[index] - at.value)) index = i; });
+  const x = map.px(map.xs[index]);
+  const y = map.ys ? map.py(map.ys[index]) : map.m.top;
+  const text = map.hoverText ? map.hoverText(index) : signed(map.xs[index], 0) + "° · " + num(map.ys[index], 1) + " " + map.unit;
+  const boxWidth = text.length * 6 + 12;
+  let boxX = x + 8 + boxWidth > map.width - map.m.right ? x - 8 - boxWidth : x + 8;
+  boxX = clamp(boxX, 2, Math.max(2, map.width - boxWidth - 2));
+
+  const line = group.querySelector(".hv-line");
+  line.setAttribute("x1", x); line.setAttribute("x2", x);
+  line.setAttribute("y1", map.m.top); line.setAttribute("y2", map.height - map.m.bottom);
+  const dot = group.querySelector(".hv-dot");
+  dot.setAttribute("cx", x); dot.setAttribute("cy", y);
+  dot.setAttribute("visibility", map.ys ? "visible" : "hidden");
+  const box = group.querySelector(".hv-box");
+  box.setAttribute("x", boxX); box.setAttribute("y", map.m.top + 2); box.setAttribute("width", boxWidth);
+  const label = group.querySelector(".hv-text");
+  label.setAttribute("x", boxX + 6); label.setAttribute("y", map.m.top + 15);
+  label.textContent = text;
+  group.setAttribute("visibility", "visible");
+}
+
+let chartDragging = null;
+
+function wireChart(element) {
+  element.addEventListener("pointerdown", (event) => {
+    const line = event.target.closest(".hist");
+    if (line) {
+      restoreHistory(Number(line.dataset.id));
+      return;
+    }
+    if (!event.target.classList.contains("plot-bg")) return;
+    chartDragging = element;
+    // capture can fail for synthetic or already-released pointers, dragging still works without it
+    try { element.setPointerCapture(event.pointerId); } catch (error) { /* ignore */ }
+    const at = chartX(element, event);
+    if (at) setAnkle(at.value);
+    showHover(element, event);
+  });
+  element.addEventListener("pointermove", (event) => {
+    if (chartDragging === element) {
+      const at = chartX(element, event);
+      if (at) setAnkle(clamp(at.value, element._map.x0, element._map.x1));
+    }
+    showHover(element, event);
+  });
+  const stop = () => { chartDragging = null; };
+  element.addEventListener("pointerup", stop);
+  element.addEventListener("pointercancel", stop);
+  element.addEventListener("pointerover", (event) => {
+    const line = event.target.closest(".hist");
+    setHover(line ? Number(line.dataset.id) : null);
+  });
+  element.addEventListener("pointerleave", () => {
+    setHover(null);
+    const group = element.querySelector(".hover");
+    if (group) group.setAttribute("visibility", "hidden");
+  });
+}
+
+// ── 3D view ─────────────────────────────────────────────────────────
+//
+// Bones are the model's own meshes, posed with the transforms OpenSim
+// computes. The purple ring is the interosseous window point and the teal
+// ring is the retinaculum point. Both drag on the plane perpendicular to the
+// tibia's anterior axis. The window point changes height and medial-lateral
+// position, the retinaculum point only its medial-lateral position.
+
+const three = { ready: false };
+let drag = null;
+let renderQueued = false;
+
+function initViewer(geometry) {
+  const container = $("viewer");
+  if (typeof THREE === "undefined") {
+    container.innerHTML = '<div class="viewer-msg">The 3D view loads three.js from the internet the first time. ' +
+      "Connect once and reload. Everything else on the page still works.</div>";
+    return;
+  }
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  container.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0B0E14);
+  const camera = new THREE.PerspectiveCamera(30, 1, 0.005, 20);
+
+  scene.add(new THREE.HemisphereLight(0xFFFFFF, 0x2B3038, 1.05));
+  const key = new THREE.DirectionalLight(0xFFFFFF, 0.65);
+  key.position.set(1.2, 2, 1.6);
+  scene.add(key);
+  const fill = new THREE.DirectionalLight(0xFFFFFF, 0.25);
+  fill.position.set(-1.5, 0.5, -1);
+  scene.add(fill);
+
+  const boneMaterial = new THREE.MeshStandardMaterial({ color: 0xDDD6C9, roughness: 0.9, metalness: 0, side: THREE.DoubleSide });
+  const frames = {};
+  for (const mesh of geometry.meshes) {
+    if (!frames[mesh.frame]) {
+      const group = new THREE.Group();
+      group.matrixAutoUpdate = false;
+      scene.add(group);
+      frames[mesh.frame] = group;
+    }
+    const bufferGeometry = new THREE.BufferGeometry();
+    bufferGeometry.setAttribute("position", new THREE.Float32BufferAttribute(mesh.positions, 3));
+    bufferGeometry.setIndex(mesh.indices);
+    bufferGeometry.computeVertexNormals();
+    frames[mesh.frame].add(new THREE.Mesh(bufferGeometry, boneMaterial));
+  }
+
+  // the insertion line on the foot, in the calcaneus frame so it moves with the foot
+  if (!frames.calcn_l) {
+    const group = new THREE.Group();
+    group.matrixAutoUpdate = false;
+    scene.add(group);
+    frames.calcn_l = group;
+  }
+  const anchorPoints = state.config.insertions.map((item) =>
+    new THREE.Vector3(item.xyz_mm[0] / 1000, item.xyz_mm[1] / 1000, item.xyz_mm[2] / 1000));
+  const insertionLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(anchorPoints),
+    new THREE.LineBasicMaterial({ color: 0xD29922, transparent: true, opacity: 0.9, depthTest: false }));
+  insertionLine.renderOrder = 8;
+  frames.calcn_l.add(insertionLine);
+  const anchorMaterial = new THREE.MeshBasicMaterial({ color: 0xD29922, depthTest: false });
+  for (const point of anchorPoints) {
+    const dot = new THREE.Mesh(new THREE.SphereGeometry(0.0018, 10, 8), anchorMaterial);
+    dot.renderOrder = 8;
+    dot.position.copy(point);
+    frames.calcn_l.add(dot);
+  }
+  const bestMarker = new THREE.Mesh(new THREE.OctahedronGeometry(0.0042),
+    new THREE.MeshBasicMaterial({ color: 0xFFD166, depthTest: false }));
+  bestMarker.renderOrder = 9;
+  bestMarker.visible = false;
+  frames.calcn_l.add(bestMarker);
+
+  const muscles = new THREE.Group();
+  scene.add(muscles);
+  const vectors = makeVectors(scene, container);
+
+  function makeHandle(name, colour) {
+    const handle = new THREE.Mesh(
+      new THREE.SphereGeometry(0.0058, 28, 18),
+      new THREE.MeshStandardMaterial({ color: 0xFFFFFF, emissive: colour, emissiveIntensity: 0.35, roughness: 0.4 }));
+    const pick = new THREE.Mesh(new THREE.SphereGeometry(0.013, 12, 8), new THREE.MeshBasicMaterial({ visible: false }));
+    pick.userData.handle = name;
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.0095, 0.0011, 10, 40), new THREE.MeshBasicMaterial({ color: colour }));
+    handle.add(pick);
+    handle.add(ring);
+    handle.visible = false;
+    scene.add(handle);
+    return { handle, pick, ring };
+  }
+
+  Object.assign(three, {
+    ready: true, renderer, scene, camera, frames, muscles, container, vectors, bestMarker,
+    handles: { window: makeHandle("window", 0xA78BFA), retinaculum: makeHandle("retinaculum", 0x2DD4BF) },
+    raycaster: new THREE.Raycaster(), materials: {}, framed: false,
+    orbit: { target: new THREE.Vector3(), radius: 0.5, theta: Math.PI / 4, phi: 1.25 },
+  });
+
+  const resize = () => {
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    if (!w || !h) return;
+    renderer.setSize(w, h);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    requestRender();
+  };
+  new ResizeObserver(resize).observe(container);
+  resize();
+  attachInteraction();
+}
+
+// the gold diamond sits on the best insertion for the route now set
+function updateBestMarker() {
+  if (!three.ready || !three.bestMarker) return;
+  const best = lineFresh() ? state.line.best : null;
+  three.bestMarker.visible = Boolean(best);
+  if (best) {
+    const anchors = state.config.insertions;
+    const p = clamp(best.position, 0, anchors.length - 1);
+    const low = Math.min(Math.floor(p), anchors.length - 2);
+    const t = p - low;
+    const a = anchors[low].xyz_mm;
+    const b = anchors[low + 1].xyz_mm;
+    three.bestMarker.position.set(
+      (a[0] + t * (b[0] - a[0])) / 1000, (a[1] + t * (b[1] - a[1])) / 1000, (a[2] + t * (b[2] - a[2])) / 1000);
+  }
+  requestRender();
+}
+
+function requestRender() {
+  if (!three.ready || renderQueued) return;
+  renderQueued = true;
+  requestAnimationFrame(() => {
+    renderQueued = false;
+    for (const item of Object.values(three.handles)) item.ring.quaternion.copy(three.camera.quaternion);
+    three.renderer.render(three.scene, three.camera);
+    positionVectorLabels();
+  });
+}
+
+function updateCamera() {
+  const orbit = three.orbit;
+  const sinPhi = Math.sin(orbit.phi);
+  three.camera.position.set(
+    orbit.target.x + orbit.radius * sinPhi * Math.cos(orbit.theta),
+    orbit.target.y + orbit.radius * Math.cos(orbit.phi),
+    orbit.target.z + orbit.radius * sinPhi * Math.sin(orbit.theta));
+  three.camera.lookAt(orbit.target);
+}
+
+function frameView() {
+  if (!state.scene) return;
+  const donor = state.scene.paths.tib_post_l;
+  const window_ = donor[1][1];
+  const insertion = donor[donor.length - 1][1];
+  three.orbit.target.set((window_[0] + insertion[0]) / 2, (window_[1] + insertion[1]) / 2, (window_[2] + insertion[2]) / 2);
+  three.orbit.radius = 0.5;
+  three.orbit.theta = Math.PI / 4;
+  three.orbit.phi = 1.25;
+}
+
+function applyFrames(frames) {
+  for (const [name, frame] of Object.entries(frames)) {
+    const group = three.frames[name];
+    if (!group) continue;
+    const R = frame.R;
+    const p = frame.p;
+    group.matrix.set(
+      R[0][0], R[0][1], R[0][2], p[0],
+      R[1][0], R[1][1], R[1][2], p[1],
+      R[2][0], R[2][1], R[2][2], p[2],
+      0, 0, 0, 1);
+    group.matrixWorldNeedsUpdate = true;
+  }
+}
+
+function material(colour, opacity) {
+  const key = colour + "_" + opacity;
+  if (!three.materials[key]) {
+    three.materials[key] = new THREE.MeshStandardMaterial({
+      color: colour, roughness: 0.55, metalness: 0, transparent: opacity < 1, opacity: opacity,
+    });
+  }
+  return three.materials[key];
+}
+
+function addTube(points, radius, mat) {
+  const up = new THREE.Vector3(0, 1, 0);
+  for (let i = 0; i < points.length - 1; i++) {
+    const start = new THREE.Vector3(points[i][0], points[i][1], points[i][2]);
+    const end = new THREE.Vector3(points[i + 1][0], points[i + 1][1], points[i + 1][2]);
+    const direction = new THREE.Vector3().subVectors(end, start);
+    const length = direction.length();
+    if (length < 1e-6) continue;
+    const cylinder = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, length, 14, 1, false), mat);
+    cylinder.position.copy(start).addScaledVector(direction, 0.5);
+    cylinder.quaternion.setFromUnitVectors(up, direction.normalize());
+    three.muscles.add(cylinder);
+  }
+  for (const point of points) {
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(radius, 14, 10), mat);
+    ball.position.set(point[0], point[1], point[2]);
+    three.muscles.add(ball);
+  }
+}
+
+function updateScene() {
+  if (!three.ready || !state.scene) return;
+  applyFrames(state.scene.frames);
+
+  const group = three.muscles;
+  for (const child of [...group.children]) {
+    child.geometry.dispose();
+    group.remove(child);
+  }
+
+  const s = summary(state.result);
+  const donorColour = s && s.hind14 > 0 ? 0xF85149 : 0x3FB950;
+  const styles = {
+    tib_post_l: [donorColour, 0.0028, 1],
+    tib_ant_l: [0x58A6FF, 0.0016, 0.6],
+    per_long_l: [0xD29922, 0.0016, 0.6],
+    per_brev_l: [0xD29922, 0.0016, 0.6],
+  };
+  for (const [name, path] of Object.entries(state.scene.paths)) {
+    const [colour, radius, opacity] = styles[name] || [0x8B949E, 0.0012, 0.5];
+    addTube(path.map((point) => point[1]), radius, material(colour, opacity));
+  }
+
+  const donor = state.scene.paths.tib_post_l;
+  if (donor) {
+    const place = (name, index) => {
+      const item = three.handles[name];
+      if (!(drag && drag.mode === "handle" && drag.handle === name)) {
+        item.handle.position.set(donor[index][1][0], donor[index][1][1], donor[index][1][2]);
+      }
+      item.handle.visible = true;
+    };
+    place("window", 1);
+    place("retinaculum", 2);
+
+    const insertion = donor[donor.length - 1][1];
+    const marker = new THREE.Mesh(new THREE.SphereGeometry(0.0045, 16, 12), material(donorColour, 1));
+    marker.position.set(insertion[0], insertion[1], insertion[2]);
+    group.add(marker);
+    if (!three.framed) {
+      frameView();
+      three.framed = true;
+    }
+  }
+  updateVectors();
+  updateBestMarker();
+  updateCamera();
+  requestRender();
+}
+
+// ── moment vectors ──────────────────────────────────────────────────
+//
+// The transfer's moment at the ankle angle being viewed, drawn as solid
+// arrows from the ankle joint centre. A moment about an axis is a vector
+// along that axis (right-hand rule).
+//
+// Joint axes: the dorsiflexion part along the ankle axis and the supination
+// part along the subtalar axis, both straight from the engine's moments.
+// Anatomical: the same moment split along the tibia's own three axes into
+// inversion or eversion, adduction or abduction, dorsiflexion or
+// plantarflexion. The three parts start from the same point, so they fan out
+// along three different directions, and the whole moment is the diagonal of
+// the box they make. The Split switch on the plots decides whether the ankle
+// joint is included.
+//
+// Lengths are rescaled so the longest arrow is always VECTOR_LENGTH long. The
+// labels carry the true size in Nm, so the picture stays readable whether the
+// moment is 5 Nm or 50 Nm.
+
+const VECTOR_LENGTH = 0.075;   // metres, length of the longest arrow on screen
+const VECTOR_MIN_NM = 0.3;     // smaller parts are hidden
+const LABEL_GAP_PX = 10;       // gap between an arrow tip and its label
+const FORESHORTENED_PX = 14;   // an arrow shorter than this on screen points at or away from the viewer
+const VECTOR_KEYS = ["total", "ankle", "subtalar", "part0", "part1", "part2"];
+
+function makeArrow(group) {
+  const material = new THREE.MeshBasicMaterial({ color: 0xFFFFFF, depthTest: false });
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 18), material);
+  const head = new THREE.Mesh(new THREE.ConeGeometry(1, 1, 24), material);
+  const arrow = new THREE.Group();
+  arrow.add(shaft);
+  arrow.add(head);
+  group.add(arrow);
+  return { arrow, shaft, head, material };
+}
+
+function setArrow(item, origin, vector, radius, colour, order) {
+  const length = vector.length();
+  item.arrow.visible = length > 1e-6;
+  if (!item.arrow.visible) return;
+  item.material.color.set(colour);
+  const headLength = Math.min(length * 0.4, radius * 6);
+  const shaftLength = Math.max(length - headLength, 1e-6);
+  item.shaft.scale.set(radius, shaftLength, radius);
+  item.shaft.position.set(0, shaftLength / 2, 0);
+  item.head.scale.set(radius * 2.4, headLength, radius * 2.4);
+  item.head.position.set(0, shaftLength + headLength / 2, 0);
+  item.shaft.renderOrder = order;
+  item.head.renderOrder = order;
+  item.arrow.position.copy(origin);
+  item.arrow.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), vector.clone().normalize());
+}
+
+function makeVectors(scene, container) {
+  const group = new THREE.Group();
+  const arrows = {};
+  for (const key of VECTOR_KEYS) arrows[key] = makeArrow(group);
+
+  const makeDashed = () => {
+    const geometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0.01, 0)]);
+    const line = new THREE.Line(geometry, new THREE.LineDashedMaterial({
+      color: 0x9AA3B2, dashSize: 0.003, gapSize: 0.002, depthTest: false,
+    }));
+    line.renderOrder = 9;
+    group.add(line);
+    return line;
+  };
+  const dashes = [makeDashed(), makeDashed()];
+  group.visible = false;
+  scene.add(group);
+
+  const labelBox = document.createElement("div");
+  labelBox.className = "vector-labels";
+  labelBox.hidden = true;
+  const labels = {};
+  for (const key of VECTOR_KEYS) {
+    const element = document.createElement("span");
+    element.className = "vector-label";  // placed beyond the arrow tip in positionVectorLabels
+    element.dataset.key = key;
+    labelBox.appendChild(element);
+    labels[key] = element;
+  }
+  const inset = document.createElement("div");
+  inset.className = "vector-inset";
+  labelBox.appendChild(inset);
+  container.appendChild(labelBox);
+  return { group, arrows, dashes, labelBox, labels, inset, anchors: {} };
+}
+
+function renderVectorLegend() {
+  const legend = $("vectorLegend");
+  const arrow = (colour, text) => '<span><em class="arr" style="color:' + colour + '">→</em>' + text + "</span>";
+  if (state.arrowMode === "anatomical") {
+    const both = state.compMode === "both";
+    legend.innerHTML = (both ? arrow("#F0F6FC", "Total, ankle + subtalar")
+      : arrow(SIDE_COLOURS.supination, "Supination") + arrow(SIDE_COLOURS.pronation, "Pronation")) +
+      arrow(PART_COLOURS[0], "Inversion or eversion") + arrow(PART_COLOURS[1], "Adduction or abduction") +
+      arrow(PART_COLOURS[2], "Dorsiflexion or plantarflexion") +
+      '<span class="vector-note">The transfer\'s moment at the ankle angle shown, at full activation, split along the tibia\'s three axes. The three coloured parts start from the ankle joint centre and the whole moment is the diagonal of the box they make. The longest arrow is always drawn the same length, so read the size from the labels. ' +
+      (both ? "Both joints are included. " : "Only the subtalar joint is split. ") +
+      "Use Split above the parts plot to change this. Arrows follow the right-hand rule.</span>";
+  } else {
+    legend.innerHTML = arrow("#F0F6FC", "Total moment") + arrow("#58A6FF", "Dorsiflexion") + arrow("#F0883E", "Plantarflexion") +
+      arrow("#3FB950", "Pronation") + arrow("#F85149", "Supination") +
+      '<span class="vector-note">The transfer\'s moment at the ankle angle shown, at full activation, drawn from the ankle joint centre. The longest arrow is always drawn the same length, so read the size from the labels. ' +
+      "The dorsiflexion or plantarflexion arrow lies along the ankle axis, and the supination or pronation arrow along the subtalar axis. " +
+      "The dashed lines show the two parts adding up to the total. Arrows follow the right-hand rule.</span>";
+  }
+}
+
+function valueAtAngle(angles, values, angle) {
+  if (angle <= angles[0]) return values[0];
+  for (let i = 1; i < angles.length; i++) {
+    if (angle <= angles[i]) {
+      const t = (angle - angles[i - 1]) / (angles[i] - angles[i - 1]);
+      return values[i - 1] + t * (values[i] - values[i - 1]);
+    }
+  }
+  return values[values.length - 1];
+}
+
+function updateVectors() {
+  const vectors = three.vectors;
+  if (!vectors) return;
+  const axes = state.scene && state.scene.axes;
+  const result = state.result;
+  const show = Boolean(state.showVectors && axes && result);
+  vectors.group.visible = show;
+  vectors.labelBox.hidden = !show;
+  if (!show) return;
+
+  const angle = Number.isFinite(state.scene.ankle_deg) ? state.scene.ankle_deg : state.ankle;
+  const ankleNm = valueAtAngle(result.angles, result.dorsi_moment, angle);
+  const subtalarNm = valueAtAngle(result.angles, result.hindfoot_moment, angle);
+  const origin = new THREE.Vector3(...axes.ankle.centre);
+  // vectors in Nm first, then one gain so the longest arrow is VECTOR_LENGTH
+  const ankleVector = new THREE.Vector3(...axes.ankle.direction).normalize().multiplyScalar(ankleNm);
+  const subtalarVector = new THREE.Vector3(...axes.subtalar.direction).normalize().multiplyScalar(subtalarNm);
+
+  const draw = (key, start, vectorNm, gain, name, colour, radius, order) => {
+    const item = vectors.arrows[key];
+    const size = vectorNm.length();
+    if (size < VECTOR_MIN_NM) {
+      item.arrow.visible = false;
+      vectors.anchors[key] = null;
+      return;
+    }
+    const vector = vectorNm.clone().multiplyScalar(gain);
+    setArrow(item, start, vector, radius, colour, order);
+    const label = vectors.labels[key];
+    label.dataset.text = name + " " + num(size, 1) + " Nm";
+    label.style.color = colour;
+    label.style.borderColor = colour;
+    vectors.anchors[key] = { base: start.clone(), tip: start.clone().add(vector) };
+  };
+  const hide = (key) => {
+    vectors.arrows[key].arrow.visible = false;
+    vectors.anchors[key] = null;
+  };
+
+  if (state.arrowMode === "anatomical") {
+    const both = state.compMode === "both";
+    const whole = subtalarVector.clone();
+    if (both) whole.add(ankleVector);
+    // the tibia's anterior, superior and lateral-to-medial axes, in the ground frame
+    const R = state.scene.frames.tibia_l.R;
+    const tibiaAxes = [0, 1, 2].map((j) => new THREE.Vector3(R[0][j], R[1][j], R[2][j]).normalize());
+    const along = tibiaAxes.map((axis) => whole.dot(axis));
+    // inversion is minus x, adduction is minus y, dorsiflexion is plus z
+    const values = [-along[0], -along[1], along[2]];
+    const gain = VECTOR_LENGTH / Math.max(whole.length(), 1e-6);  // the whole moment is the longest
+
+    ["part0", "part1", "part2"].forEach((key, k) => {
+      const word = values[k] >= 0 ? PART_WORDS[k][0] : PART_WORDS[k][1];
+      draw(key, origin, tibiaAxes[k].clone().multiplyScalar(along[k]), gain, word, PART_COLOURS[k], 0.0019, 11 + k);
+    });
+    const wholeNm = whole.length();
+    const wholeName = both ? "Total" : subtalarNm >= 0 ? "Supination" : "Pronation";
+    const wholeColour = both ? "#F0F6FC" : subtalarNm >= 0 ? SIDE_COLOURS.supination : SIDE_COLOURS.pronation;
+    draw("total", origin, whole, gain, wholeName, wholeColour, 0.0024, 14);
+    hide("ankle");
+    hide("subtalar");
+    vectors.dashes.forEach((line) => { line.visible = false; });
+    vectors.inset.innerHTML = componentInsetSvg(values, wholeNm, angle, both);
+    return;
+  }
+
+  const totalVector = ankleVector.clone().add(subtalarVector);
+  const gain = VECTOR_LENGTH / Math.max(totalVector.length(), Math.abs(ankleNm), Math.abs(subtalarNm), 1e-6);
+  draw("ankle", origin, ankleVector, gain, ankleNm >= 0 ? "Dorsiflexion" : "Plantarflexion",
+    ankleNm >= 0 ? "#58A6FF" : "#F0883E", 0.0019, 11);
+  draw("subtalar", origin, subtalarVector, gain, subtalarNm >= 0 ? "Supination" : "Pronation",
+    subtalarNm >= 0 ? SIDE_COLOURS.supination : SIDE_COLOURS.pronation, 0.0019, 12);
+  draw("total", origin, totalVector, gain, "Total", "#F0F6FC", 0.0027, 13);
+  ["part0", "part1", "part2"].forEach(hide);
+
+  const ankleUnit = new THREE.Vector3(...axes.ankle.direction).normalize();
+  const subtalarUnit = new THREE.Vector3(...axes.subtalar.direction).normalize();
+  vectors.inset.innerHTML = vectorInsetSvg(ankleNm, subtalarNm, ankleUnit.dot(subtalarUnit));
+
+  // the dashed lines close the parallelogram, so the two parts visibly add up to the total
+  const bothShown = Math.abs(ankleNm) >= VECTOR_MIN_NM && Math.abs(subtalarNm) >= VECTOR_MIN_NM;
+  const tipTotal = origin.clone().addScaledVector(totalVector, gain);
+  const starts = [origin.clone().addScaledVector(ankleVector, gain), origin.clone().addScaledVector(subtalarVector, gain)];
+  vectors.dashes.forEach((line, index) => {
+    line.visible = bothShown;
+    const positions = line.geometry.attributes.position;
+    positions.setXYZ(0, starts[index].x, starts[index].y, starts[index].z);
+    positions.setXYZ(1, tipTotal.x, tipTotal.y, tipTotal.z);
+    positions.needsUpdate = true;
+    line.geometry.computeBoundingSphere();
+    line.computeLineDistances();
+  });
+}
+
+// Three bars, one per anatomical direction. The word on the side the bar
+// points to is lit, and the check at the bottom shows the three parts are
+// the sides of a box whose diagonal is the whole moment.
+function componentInsetSvg(values, wholeNm, angle, both) {
+  const width = 262;
+  const height = 170;
+  const centre = 131;
+  const half = 88;
+  const reach = Math.max(5, ...values.map(Math.abs));
+  const scale = half / reach;
+  const font = 'font-family="Segoe UI, system-ui, sans-serif"';
+  const text = (x, y, words, colour, anchor, size, weight) => '<text x="' + x + '" y="' + y + '" ' + font + ' font-size="' + size +
+    '" font-weight="' + weight + '" fill="' + colour + '" text-anchor="' + anchor + '">' + words + "</text>";
+
+  let svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height + '" viewBox="0 0 ' + width + " " + height + '">';
+  svg += text(4, 13, "Anatomical parts at " + signed(angle, 0) + "°", "#E6E8EE", "start", 10.5, 600);
+  svg += text(4, 26, (both ? "ankle + subtalar joints" : "subtalar joint only") + ", Nm", "#9AA3B2", "start", 9.5, 400);
+  values.forEach((value, k) => {
+    const y = 52 + k * 36;
+    const positive = value >= 0;
+    svg += text(6, y, PART_WORDS[k][1], positive ? "#6E7681" : PART_COLOURS[k], "start", 9.5, positive ? 400 : 700);
+    svg += text(width - 6, y, PART_WORDS[k][0], positive ? PART_COLOURS[k] : "#6E7681", "end", 9.5, positive ? 700 : 400);
+    svg += text(centre, y, num(Math.abs(value), 1), PART_COLOURS[k], "middle", 10, 700);
+    svg += '<line x1="' + (centre - half) + '" y1="' + (y + 10) + '" x2="' + (centre + half) + '" y2="' + (y + 10) +
+      '" stroke="#2A303C" stroke-width="8" stroke-linecap="round"/>';
+    svg += '<line x1="' + centre + '" y1="' + (y + 10) + '" x2="' + (centre + value * scale).toFixed(1) + '" y2="' + (y + 10) +
+      '" stroke="' + PART_COLOURS[k] + '" stroke-width="8"/>';
+    svg += '<line x1="' + centre + '" y1="' + (y + 4) + '" x2="' + centre + '" y2="' + (y + 16) + '" stroke="#E6E8EE" stroke-width="1.2"/>';
+  });
+  const check = "√(sum of squares) " + num(Math.hypot(...values), 1) + " = whole " + num(wholeNm, 1) + " Nm";
+  svg += '<text x="4" y="' + (height - 6) + '" ' + font + ' font-size="10" fill="#9AA3B2"' + fitAttr(check, 10, width - 8) + ">" + check + "</text>";
+  svg += "</svg>";
+  return svg;
+}
+
+// A flat drawing of the same vectors in the plane that holds both axes, so
+// the lengths are true whatever the camera angle. The ankle axis runs to
+// the right, and the subtalar axis sits at its real angle from it.
+function vectorInsetSvg(ankleNm, subtalarNm, cosAngle) {
+  const width = 262;
+  const height = 214;
+  const centreX = 122;
+  const centreY = 112;
+  const pxPerNm = 2.0;
+  const sinAngle = Math.sqrt(Math.max(0, 1 - cosAngle * cosAngle));
+  const xy = (u, v) => [centreX + u * pxPerNm, centreY - v * pxPerNm];
+  const ankleTip = [ankleNm, 0];
+  const subtalarTip = [subtalarNm * cosAngle, subtalarNm * sinAngle];
+  const totalTip = [ankleTip[0] + subtalarTip[0], ankleTip[1] + subtalarTip[1]];
+  const totalNm = Math.hypot(totalTip[0], totalTip[1]);
+  const ankleColour = ankleNm >= 0 ? "#58A6FF" : "#F0883E";
+  const subtalarColour = subtalarNm >= 0 ? "#3FB950" : "#F85149";
+  const font = 'font-family="Segoe UI, system-ui, sans-serif"';
+
+  const marker = (id, colour) => '<marker id="' + id + '" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="3.4" ' +
+    'markerHeight="3.4" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="' + colour + '"/></marker>';
+  const segment = (from, to, colour, strokeWidth, extra) => {
+    const a = xy(from[0], from[1]);
+    const b = xy(to[0], to[1]);
+    return '<line x1="' + a[0].toFixed(1) + '" y1="' + a[1].toFixed(1) + '" x2="' + b[0].toFixed(1) + '" y2="' + b[1].toFixed(1) +
+      '" stroke="' + colour + '" stroke-width="' + strokeWidth + '" stroke-linecap="round" ' + (extra || "") + "/>";
+  };
+  const label = (point, words, colour, anchor) => {
+    const p = xy(point[0], point[1]);
+    return '<text x="' + p[0].toFixed(1) + '" y="' + p[1].toFixed(1) + '" ' + font + ' font-size="9.5" fill="' + colour +
+      '" text-anchor="' + anchor + '">' + words + "</text>";
+  };
+
+  const reach = 112 / pxPerNm;
+  let svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height + '" viewBox="0 0 ' + width + " " + height + '">';
+  svg += "<defs>" + marker("vecA", ankleColour) + marker("vecS", subtalarColour) + marker("vecT", "#F0F6FC") + "</defs>";
+  svg += '<text x="4" y="13" ' + font + ' font-size="10.5" font-weight="600" fill="#E6E8EE">True length, in the plane of both axes</text>';
+
+  svg += segment([-reach, 0], [reach, 0], "#4A5262", 1, 'stroke-dasharray="3 3"');
+  // the subtalar guide is shorter so its label stays clear of the title
+  const subtalarReach = 80 / pxPerNm;
+  svg += segment([-subtalarReach * cosAngle, -subtalarReach * sinAngle], [subtalarReach * cosAngle, subtalarReach * sinAngle], "#4A5262", 1, 'stroke-dasharray="3 3"');
+  svg += label([reach, 7 / pxPerNm], "ankle axis", "#9AA3B2", "end");
+  svg += label([subtalarReach * cosAngle + 6 / pxPerNm, subtalarReach * sinAngle - 4 / pxPerNm], "subtalar axis", "#9AA3B2", "start");
+
+  const showAnkle = Math.abs(ankleNm) >= VECTOR_MIN_NM;
+  const showSubtalar = Math.abs(subtalarNm) >= VECTOR_MIN_NM;
+  if (showAnkle && showSubtalar) {
+    svg += segment(ankleTip, totalTip, "#9AA3B2", 1, 'stroke-dasharray="4 3"');
+    svg += segment(subtalarTip, totalTip, "#9AA3B2", 1, 'stroke-dasharray="4 3"');
+  }
+  if (showAnkle) svg += segment([0, 0], ankleTip, ankleColour, 3, 'marker-end="url(#vecA)"');
+  if (showSubtalar) svg += segment([0, 0], subtalarTip, subtalarColour, 3, 'marker-end="url(#vecS)"');
+  if (totalNm >= VECTOR_MIN_NM) svg += segment([0, 0], totalTip, "#F0F6FC", 3.5, 'marker-end="url(#vecT)"');
+  svg += '<circle cx="' + centreX + '" cy="' + centreY + '" r="2.5" fill="#E6E8EE"/>';
+
+  const degrees = Math.round(Math.acos(Math.max(-1, Math.min(1, cosAngle))) * 180 / Math.PI);
+  svg += '<text x="4" y="' + (height - 6) + '" ' + font + ' font-size="10" fill="#9AA3B2">Axes ' + degrees +
+    "° apart, total " + num(totalNm, 1) + " Nm</text>";
+  svg += "</svg>";
+  return svg;
+}
+
+function positionVectorLabels() {
+  const vectors = three.vectors;
+  if (!vectors || vectors.labelBox.hidden) return;
+  const width = three.container.clientWidth;
+  const height = three.container.clientHeight;
+  const toScreen = (point) => {
+    const p = point.clone().project(three.camera);
+    return { x: (p.x + 1) / 2 * width, y: (1 - p.y) / 2 * height, z: p.z };
+  };
+  for (const key of VECTOR_KEYS) {
+    const element = vectors.labels[key];
+    const info = vectors.anchors[key];
+    if (!info) {
+      element.hidden = true;
+      continue;
+    }
+    const base = toScreen(info.base);
+    const tip = toScreen(info.tip);
+    element.hidden = tip.z > 1;
+    let dx = tip.x - base.x;
+    let dy = tip.y - base.y;
+    const length = Math.hypot(dx, dy);
+    let text = element.dataset.text || "";
+    if (length < FORESHORTENED_PX) {
+      // seen end on, the arrow is only a dot, so say which way it points
+      text += tip.z < base.z ? " · points at you" : " · points away";
+      dx = 1;
+      dy = 0;
+    } else {
+      dx /= length;
+      dy /= length;
+    }
+    element.textContent = text;
+    element.style.left = (tip.x + dx * LABEL_GAP_PX).toFixed(1) + "px";
+    element.style.top = (tip.y + dy * LABEL_GAP_PX).toFixed(1) + "px";
+    // the label grows away from the tip, on the side the arrow points to
+    element.style.transform = "translate(" + ((dx - 1) * 50).toFixed(0) + "%, " + ((dy - 1) * 50).toFixed(0) + "%)";
+  }
+  // a label that would run off the edge of the viewer is slid back inside it
+  const frame = three.container.getBoundingClientRect();
+  for (const key of VECTOR_KEYS) {
+    const element = vectors.labels[key];
+    if (element.hidden) continue;
+    const rect = element.getBoundingClientRect();
+    if (rect.width === 0) continue;
+    const shiftX = Math.max(0, frame.left + 4 - rect.left) - Math.max(0, rect.right - (frame.right - 4));
+    const shiftY = Math.max(0, frame.top + 4 - rect.top) - Math.max(0, rect.bottom - (frame.bottom - 4));
+    if (shiftX) element.style.left = (parseFloat(element.style.left) + shiftX).toFixed(1) + "px";
+    if (shiftY) element.style.top = (parseFloat(element.style.top) + shiftY).toFixed(1) + "px";
+  }
+  // labels whose boxes overlap are pushed down until they clear the one above
+  const boxes = VECTOR_KEYS.map((key) => vectors.labels[key])
+    .filter((element) => !element.hidden)
+    .map((element) => ({ element, rect: element.getBoundingClientRect() }))
+    .filter((item) => item.rect.width > 0)
+    .sort((a, b) => a.rect.top - b.rect.top);
+  for (let i = 0; i < boxes.length; i++) {
+    for (let j = 0; j < i; j++) {
+      const a = boxes[j].rect;
+      const b = boxes[i].rect;
+      const overlap = b.left < a.right && b.right > a.left && b.top < a.bottom + 2 && b.bottom > a.top;
+      if (!overlap) continue;
+      const shift = a.bottom + 2 - b.top;
+      boxes[i].element.style.top = (parseFloat(boxes[i].element.style.top) + shift).toFixed(1) + "px";
+      boxes[i].rect = { left: b.left, right: b.right, top: b.top + shift, bottom: b.bottom + shift };
+    }
+  }
+}
+
+function tibiaFrame() {
+  return state.scene && state.scene.frames.tibia_l;
+}
+
+function toTibiaLocal(world) {
+  const frame = tibiaFrame();
+  const R = frame.R;
+  const offset = [world.x - frame.p[0], world.y - frame.p[1], world.z - frame.p[2]];
+  return [0, 1, 2].map((i) => R[0][i] * offset[0] + R[1][i] * offset[1] + R[2][i] * offset[2]);
+}
+
+function fromTibiaLocal(local) {
+  const frame = tibiaFrame();
+  const R = frame.R;
+  const world = [0, 1, 2].map((k) => R[k][0] * local[0] + R[k][1] * local[1] + R[k][2] * local[2] + frame.p[k]);
+  return new THREE.Vector3(world[0], world[1], world[2]);
+}
+
+function pointerNdc(event) {
+  const rect = three.renderer.domElement.getBoundingClientRect();
+  return new THREE.Vector2(
+    ((event.clientX - rect.left) / rect.width) * 2 - 1,
+    -((event.clientY - rect.top) / rect.height) * 2 + 1);
+}
+
+function handleUnderPointer(event) {
+  const picks = Object.values(three.handles).filter((item) => item.handle.visible).map((item) => item.pick);
+  if (!picks.length) return null;
+  three.raycaster.setFromCamera(pointerNdc(event), three.camera);
+  const hits = three.raycaster.intersectObjects(picks, false);
+  return hits.length ? hits[0].object.userData.handle : null;
+}
+
+function attachInteraction() {
+  const canvas = three.renderer.domElement;
+
+  canvas.addEventListener("pointerdown", (event) => {
+    try { canvas.setPointerCapture(event.pointerId); } catch (error) { /* ignore */ }
+    const name = event.button === 0 ? handleUnderPointer(event) : null;
+    if (name && tibiaFrame()) {
+      const frame = tibiaFrame();
+      // plane through the point, perpendicular to the tibia's anterior axis
+      const normal = new THREE.Vector3(frame.R[0][0], frame.R[1][0], frame.R[2][0]).normalize();
+      const origin = three.handles[name].handle.position.clone();
+      drag = { mode: "handle", handle: name, plane: new THREE.Plane().setFromNormalAndCoplanarPoint(normal, origin) };
+      canvas.style.cursor = "grabbing";
+    } else {
+      drag = { mode: "orbit", x: event.clientX, y: event.clientY };
+    }
+  });
+
+  canvas.addEventListener("pointermove", (event) => {
+    if (!drag) {
+      canvas.style.cursor = handleUnderPointer(event) ? "grab" : "default";
+      return;
+    }
+    if (drag.mode === "orbit") {
+      const orbit = three.orbit;
+      orbit.theta -= (event.clientX - drag.x) * 0.008;
+      orbit.phi = clamp(orbit.phi - (event.clientY - drag.y) * 0.008, 0.15, Math.PI - 0.15);
+      drag.x = event.clientX;
+      drag.y = event.clientY;
+      updateCamera();
+      requestRender();
+      return;
+    }
+
+    three.raycaster.setFromCamera(pointerNdc(event), three.camera);
+    const hit = new THREE.Vector3();
+    if (!three.raycaster.ray.intersectPlane(drag.plane, hit)) return;
+
+    const config = state.config;
+    const local = toTibiaLocal(hit);
+    if (drag.handle === "window") {
+      const zMm = clamp(local[2] * 1000, config.route_range_mm[0], config.route_range_mm[1]);
+      const hCm = clamp((local[1] - config.tip_y) * 100, config.height_range_cm[0], config.height_range_cm[1]);
+      state.z = Math.round(zMm * 2) / 2;
+      state.h = Math.round(hCm * 20) / 20;
+      three.handles.window.handle.position.copy(fromTibiaLocal([local[0], config.tip_y + state.h / 100, state.z / 1000]));
+    } else {
+      const range = config.retinaculum_range_mm;
+      state.p3 = Math.round(clamp(local[2] * 1000, range[0], range[1]) * 2) / 2;
+      const point = config.retinaculum_point;
+      three.handles.retinaculum.handle.position.copy(fromTibiaLocal([point.x, point.y, state.p3 / 1000]));
+    }
+    requestRender();
+    renderControls();
+    requestEvaluate();
+  });
+
+  const finish = () => {
+    if (!drag) return;
+    const moved = drag.mode === "handle" ? drag.handle : null;
+    drag = null;
+    canvas.style.cursor = "default";
+    if (moved) requestEvaluate({ refs: true, commit: moved === "window" ? windowLabel() : retinaculumLabel() });
+  };
+  canvas.addEventListener("pointerup", finish);
+  canvas.addEventListener("pointercancel", finish);
+
+  canvas.addEventListener("wheel", (event) => {
+    event.preventDefault();
+    const orbit = three.orbit;
+    orbit.radius = clamp(orbit.radius * (event.deltaY > 0 ? 1.1 : 0.9), 0.12, 3);
+    updateCamera();
+    requestRender();
+  }, { passive: false });
+
+  canvas.addEventListener("dblclick", () => { frameView(); updateCamera(); requestRender(); });
+  canvas.addEventListener("contextmenu", (event) => event.preventDefault());
+}
+
+// ── export ──────────────────────────────────────────────────────────
+
+function download(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+function parametersLine() {
+  return "Route " + signed(state.z, 1) + " mm · retinaculum " + signed(effectiveP3(params()), 1) + " mm · insertion " +
+    num(state.pos, 2) + ", " + describePosition(state.pos) + " · window " + num(state.h, 1) + " cm above malleolus tip · " + PALSY_LABEL[state.palsy];
+}
+
+function svgToImage(svg) {
+  return new Promise((resolve, reject) => {
+    const blob = new Blob([new XMLSerializer().serializeToString(svg)], { type: "image/svg+xml;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const image = new Image();
+    image.onload = () => { URL.revokeObjectURL(url); resolve(image); };
+    image.onerror = reject;
+    image.src = url;
+  });
+}
+
+async function exportCharts() {
+  const svgs = [...document.querySelectorAll(".chart svg")];
+  if (!svgs.length) return;
+  const scale = 2;
+  const gap = 12;
+  const header = 50;
+  const width = Math.max(...svgs.map((svg) => Number(svg.getAttribute("width"))));
+  const heights = svgs.map((svg) => Number(svg.getAttribute("height")));
+
+  const canvas = document.createElement("canvas");
+  canvas.width = (width + gap * 2) * scale;
+  canvas.height = (header + heights.reduce((a, b) => a + b, 0) + gap * svgs.length) * scale;
+  const context = canvas.getContext("2d");
+  context.scale(scale, scale);
+  context.fillStyle = "#0D1117";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = "#E6E8EE";
+  context.font = "600 15px Segoe UI, system-ui, sans-serif";
+  context.fillText("Tendon Transfer Planner", gap, 24);
+  context.fillStyle = "#9AA3B2";
+  context.font = "11px Segoe UI, system-ui, sans-serif";
+  context.fillText(parametersLine(), gap, 42);
+
+  let y = header;
+  for (let i = 0; i < svgs.length; i++) {
+    const image = await svgToImage(svgs[i]);
+    context.drawImage(image, gap, y, Number(svgs[i].getAttribute("width")), heights[i]);
+    y += heights[i] + gap;
+  }
+  canvas.toBlob((blob) => download(blob, "transfer-planner-plots.png"), "image/png");
+}
+
+function exportView() {
+  if (!three.ready) return;
+  three.renderer.render(three.scene, three.camera);
+  three.renderer.domElement.toBlob((blob) => download(blob, "transfer-planner-3d.png"), "image/png");
+}
+
+function exportCsv() {
+  const result = state.result;
+  if (!result) return;
+  const fresh = referencesFresh();
+  const level = state.palsy;
+  const subtalarParts = anatomicalParts(result, "subtalar");
+  const totalParts = anatomicalParts(result, "both");
+
+  const header = ["ankle_deg", "current_dorsi_Nm", "current_hindfoot_Nm", "current_force_N", "current_net_" + level + "_Nm",
+    "subtalar_inversion_Nm", "subtalar_adduction_Nm", "subtalar_dorsiflexion_Nm",
+    "total_inversion_Nm", "total_adduction_Nm", "total_dorsiflexion_Nm"];
+  if (fresh) {
+    for (const tag of ["IO", "CT"]) header.push(tag + "_dorsi_Nm", tag + "_hindfoot_Nm", tag + "_net_" + level + "_Nm");
+  }
+  const lines = [header.join(",")];
+  result.angles.forEach((angle, i) => {
+    const row = [angle, result.dorsi_moment[i], result.hindfoot_moment[i], result.force[i], result.net_hindfoot[level][i],
+      subtalarParts[0][i], subtalarParts[1][i], subtalarParts[2][i], totalParts[0][i], totalParts[1][i], totalParts[2][i]];
+    if (fresh) {
+      for (const tag of ["IO", "CT"]) {
+        const reference = state.references[tag];
+        row.push(reference.dorsi_moment[i], reference.hindfoot_moment[i], reference.net_hindfoot[level][i]);
+      }
+    }
+    lines.push(row.map((value, index) => index === 0 ? value : Number(value).toFixed(4)).join(","));
+  });
+
+  const s = summary(result);
+  const best = lineFresh() ? state.line.best : null;
+  lines.push("", "parameter,value",
+    "source," + backend.label,
+    "route_mm," + state.z,
+    "retinaculum_point_mm," + s.p3.toFixed(2),
+    "retinaculum_follows_route," + (state.p3 === null),
+    "insertion_position," + state.pos,
+    'insertion,"' + describePosition(state.pos) + '"',
+    "best_insertion_position," + (best ? best.position : ""),
+    "best_dorsi_lever_14deg_mm," + (best ? best.dorsi_arm_14_mm.toFixed(3) : ""),
+    "window_cm_above_malleolus_tip," + state.h,
+    "palsy," + level,
+    "dorsi_moment_neutral_Nm," + s.dfNeutral.toFixed(3),
+    "dorsi_moment_14deg_Nm," + s.df14.toFixed(3),
+    "dorsi_lever_14deg_mm," + s.arm14.toFixed(3),
+    "hindfoot_moment_14deg_Nm," + s.hind14.toFixed(3),
+    "net_hindfoot_14deg_Nm," + s.net14.toFixed(3),
+    "to_dorsiflexion_pct," + s.toDf.toFixed(1),
+    "wasted_pct," + s.wasted.toFixed(1),
+    "bend_window_deg," + Number(s.bendWindow).toFixed(1),
+    "bend_retinaculum_deg," + Number(s.bendRetinaculum).toFixed(1),
+    "zajac_excursion," + s.excursion.toFixed(3),
+    "tendon_slack_mm," + s.slack.toFixed(2));
+  download(new Blob([lines.join("\n")], { type: "text/csv" }), "transfer-planner-v2.csv");
+}
+
+// ── start ───────────────────────────────────────────────────────────
+
+async function start() {
+  try {
+    setStatus("Loading…", "busy");
+    let geometry = null;
+    // the live engine only ever runs on this computer, so a hosted copy skips the probe
+    const local = ["localhost", "127.0.0.1"].includes(location.hostname);
+    const forceStatic = !local || new URLSearchParams(location.search).has("static");
+    if (!forceStatic) {
+      try {
+        state.config = await getJSON("api/config");
+        backend = liveBackend;
+      } catch (error) {
+        backend = null;
+      }
+    }
+    if (!backend) {
+      setStatus("Loading precomputed results…", "busy");
+      const loaded = await loadStatic();
+      state.config = loaded.config;
+      geometry = loaded.geometry;
+      backend = loaded.backend;
+    }
+    $("mode").textContent = backend.label + ", version 2";
+    // the first version is only hosted, so the local server links to the hosted copy
+    $("v1Link").href = backend.name === "live" ? HOSTED_V1 : "../v1/";
+
+    try {
+      state.gait = await getJSON("../data/gait_cycle.json");
+    } catch (error) {
+      console.warn("No gait cycle data, the plain ankle slider stays.", error);
+    }
+    state.z = state.config.presets.IO.z_mm;
+    state.h = state.config.presets.IO.height_cm;
+    state.pos = state.config.line.v2_best.IO.position;
+    buildControls();
+    renderControls();
+    renderVectorLegend();
+    $("caveats").innerHTML = state.config.caveats.map((caveat) => "<li>" + esc(caveat) + "</li>").join("");
+
+    if (state.gait) {
+      $("gaitBox").hidden = false;
+      $("gaitPlay").hidden = false;
+      $("anklePlain").hidden = true;
+      buildGaitPhases();
+      state.gaitPct = 0;
+      state.ankle = Math.round(gaitAngleAt(0) * 10) / 10;
+      $("ankle").value = state.ankle;
+      renderGait();
+    }
+
+    setStatus("Loading bones…", "busy");
+    initViewer(geometry || await getJSON("api/geometry"));
+    requestEvaluate({ refs: true, commit: "Published interosseous route, best insertion" });
+    // the other grid files load quietly once the first answer is on screen
+    setTimeout(() => backend.prefetch(), 1500);
+  } catch (error) {
+    showError(error);
+  }
+}
+
+window.addEventListener("resize", debounce(() => {
+  renderCharts();
+  renderLine();
+  renderGaitSpark();
+}, 150));
+start();
+})();
+</script>
+</body>
+</html>

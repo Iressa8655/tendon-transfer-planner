@@ -225,6 +225,7 @@ footer { display: flex; gap: 20px; align-items: flex-start; justify-content: spa
   <span class="model">Tibialis posterior transfer · OpenSim Gait2392 · left leg</span>
   <span class="mode" id="mode">Connecting…</span>
   <a class="mode-link" id="v1Link" href="v1/">Version 1</a>
+  <a class="mode-link" href="v2/">Version 2</a>
   <span class="status"><span class="dot" id="dot"></span><span id="status">Loading…</span></span>
 </header>
 <div class="error" id="error"></div>
@@ -239,11 +240,16 @@ footer { display: flex; gap: 20px; align-items: flex-start; justify-content: spa
       <div class="scale-row"><span>lateral, interosseous</span><span>medial, circumtibial</span></div>
     </div>
 
-    <div class="control">
+    <div class="control" hidden>
       <div class="label-row"><span>Retinaculum point</span><span class="value teal" id="pValue"></span></div>
       <div class="slider-wrap"><input type="range" id="p3" style="--thumb: var(--teal)"><div class="ticks" id="pTicks"></div></div>
       <div class="scale-row"><span>lateral</span><button class="chip" id="pFollow" type="button">Follow route</button><span>medial</span></div>
       <div class="note">Where the tendon passes under the extensor retinaculum. It has not been measured yet, and it largely sets the hindfoot direction.</div>
+    </div>
+
+    <div class="control">
+      <div class="label-row"><span>Retinaculum point</span><span class="value teal">fixed</span></div>
+      <div class="note">The tendon passes under the extensor retinaculum at one fixed point for each route, as in the published models. This passage is a simplification of the real anatomy and has not been measured, so it cannot be moved in this version.</div>
     </div>
 
     <div class="control">
@@ -280,7 +286,7 @@ footer { display: flex; gap: 20px; align-items: flex-start; justify-content: spa
   <section class="panel viewer-panel">
     <div class="viewer-head">
       <span class="viewer-title viewer-tools"><span class="section-title" style="margin:0">Model</span><button class="ghost small" id="vectorToggle" aria-pressed="true" type="button">Moment vectors</button><span class="segmented mini" id="arrowMode"><button type="button" data-mode="anatomical">Anatomical</button><button type="button" data-mode="joints">Joint axes</button></span></span>
-      <span class="hint">Drag a ring to move that point · drag elsewhere to orbit · scroll to zoom · double-click to reset</span>
+      <span class="hint">Drag the purple ring to move the window · drag elsewhere to orbit · scroll to zoom · double-click to reset</span>
     </div>
     <div class="viewer" id="viewer"></div>
     <div class="viewer-foot gait-foot">
@@ -403,10 +409,12 @@ const SHORT_ANCHOR = ["Nav", "Med", "Int", "Lat", "Cub", "5MT"];
 const CHECK_ANGLE = 14;     // the most dorsiflexion walking needs, the V2 selection angle
 const BEST_COLOUR = "#FFD166";
 const HOSTED_V1 = "https://iressa8655.github.io/tendon-transfer-planner/v1/";
+// window height used in the paper, inside the 6.4 to 7.1 cm range that preserves the muscle origin
+const WINDOW_HEIGHT_CM = 7.0;
 const HISTORY_LIMIT = 12;
 
 const state = {
-  z: -20, h: 7.53, p3: null, pos: 2.75, palsy: "common", ankle: 0, showReferences: true, showVectors: true, gait: null, gaitPct: null, gaitPlaying: false,
+  z: -20, h: 7.0, p3: null, pos: 2.75, palsy: "common", ankle: 0, showReferences: true, showVectors: true, gait: null, gaitPct: null, gaitPlaying: false,
   compMode: "subtalar", arrowMode: "anatomical",
   config: null, result: null, scene: null, references: null, referencesFor: null, line: null, lineFor: null,
 };
@@ -920,7 +928,7 @@ function restoreHistory(id) {
   if (!entry) return;
   state.z = entry.params.z;
   state.h = entry.params.h;
-  state.p3 = entry.params.p3;
+  state.p3 = null;
   state.pos = entry.params.pos;
   state.result = entry.result;
   history.activeId = id;
@@ -1028,7 +1036,7 @@ function buildControls() {
 
   route.addEventListener("input", () => { state.z = Number(route.value); renderControls(); requestEvaluate(); });
   route.addEventListener("change", () => requestEvaluate({ refs: true, commit: windowLabel() }));
-  retinaculum.addEventListener("input", () => { state.p3 = Number(retinaculum.value); renderControls(); requestEvaluate(); });
+  retinaculum.addEventListener("input", () => { state.p3 = null; renderControls(); requestEvaluate(); });
   retinaculum.addEventListener("change", () => requestEvaluate({ refs: true, commit: retinaculumLabel() }));
   height.addEventListener("input", () => { state.h = Number(height.value); renderControls(); requestEvaluate(); });
   height.addEventListener("change", () => requestEvaluate({ refs: true, commit: "Window height " + num(state.h, 1) + " cm" }));
@@ -1050,7 +1058,7 @@ function buildControls() {
       const tag = button.dataset.preset;
       const preset = config.presets[tag];
       state.z = preset.z_mm;
-      state.h = preset.height_cm;
+      state.h = WINDOW_HEIGHT_CM;
       state.p3 = null;
       renderControls();
       requestEvaluate({ refs: true, commit: "Published " + (tag === "IO" ? "interosseous" : "circumtibial") + " route" });
@@ -2543,7 +2551,8 @@ function pointerNdc(event) {
 }
 
 function handleUnderPointer(event) {
-  const picks = Object.values(three.handles).filter((item) => item.handle.visible).map((item) => item.pick);
+  // the retinaculum point is fixed in version 3, so only the window ring can be picked
+  const picks = Object.values(three.handles).filter((item) => item.handle.visible && item !== three.handles.retinaculum).map((item) => item.pick);
   if (!picks.length) return null;
   three.raycaster.setFromCamera(pointerNdc(event), three.camera);
   const hits = three.raycaster.intersectObjects(picks, false);
@@ -2774,7 +2783,7 @@ async function start() {
       geometry = loaded.geometry;
       backend = loaded.backend;
     }
-    $("mode").textContent = backend.label + ", version 2";
+    $("mode").textContent = backend.label + ", version 3";
     // the first version is only hosted, so the local server links to the hosted copy
     $("v1Link").href = backend.name === "live" ? HOSTED_V1 : "v1/";
 
@@ -2784,7 +2793,7 @@ async function start() {
       console.warn("No gait cycle data, the plain ankle slider stays.", error);
     }
     state.z = state.config.presets.IO.z_mm;
-    state.h = state.config.presets.IO.height_cm;
+    state.h = WINDOW_HEIGHT_CM;
     state.pos = state.config.line.v2_best.IO.position;
     buildControls();
     renderControls();
