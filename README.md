@@ -1,6 +1,6 @@
 # Tendon Transfer Planner
 
-An interactive planner for tibialis posterior tendon transfer in foot drop. Drag the window point and the retinaculum point on the model, slide the insertion along the midfoot, choose a window height, and watch the dorsiflexion and hindfoot moments update.
+An interactive planner for tibialis posterior tendon transfer in foot drop. Choose the route, drag the window point on the model, slide the insertion along the midfoot, choose a window height, and watch the dorsiflexion and hindfoot moments update.
 
 ## Try it
 
@@ -8,9 +8,15 @@ An interactive planner for tibialis posterior tendon transfer in foot drop. Drag
 
 Scan the code with a phone camera, or open [iressa8655.github.io/tendon-transfer-planner](https://iressa8655.github.io/tendon-transfer-planner/).
 
-The first version is kept at [iressa8655.github.io/tendon-transfer-planner/v1](https://iressa8655.github.io/tendon-transfer-planner/v1/).
+Earlier versions are kept at [/v1](https://iressa8655.github.io/tendon-transfer-planner/v1/) and [/v2](https://iressa8655.github.io/tendon-transfer-planner/v2/).
 
-## What is new in version 2
+## What is new in version 3
+
+- **The retinaculum point is fixed.** The tendon passes under the extensor retinaculum at one fixed point for each route, as in the published models. This passage simplifies the real anatomy and has not been measured, so it can no longer be dragged or moved with a slider.
+- **The window starts at 7.0 cm** above the tip of the medial malleolus, the height used in the paper. It can still be changed from 4 to 12 cm.
+- Version 2, with the movable retinaculum point, stays available at `/v2` and uses the same precomputed data.
+
+## What was new in version 2
 
 - **The insertion slides along the midfoot.** Six sites are joined by straight lines, from the navicular through the three cuneiforms and the cuboid to the base of the fifth metatarsal. The lateral cuneiform site now sits on the dorsal surface of its bone.
 - **The best insertion is marked for every route.** It is the point with the largest dorsiflexion moment arm at 14 degrees of dorsiflexion, the most the ankle needs in walking. A small plot above the slider shows the whole line, and a gold diamond marks the best point on the foot.
